@@ -105,6 +105,99 @@ curl -X POST localhost:8100/permissions/record \
   }'
 ```
 
+### OpenClaw
+
+[OpenClaw](https://github.com/ClawDBot/openclaw) is an open-source AI agent runtime. Here's how to wire Aperture as its permission layer:
+
+**1. Install both tools**
+
+```bash
+npm install -g openclaw@latest      # OpenClaw
+pip install -e ".[dev]"             # Aperture
+```
+
+**2. Initialize Aperture**
+
+```bash
+aperture init-db
+```
+
+**3. Add Aperture to your OpenClaw config**
+
+Create `openclaw.json` in your project root:
+
+```json
+{
+  "mcpServers": {
+    "aperture": {
+      "command": "aperture",
+      "args": ["mcp-serve"],
+      "env": {
+        "APERTURE_DB_PATH": "./aperture.db",
+        "APERTURE_PERMISSION_LEARNING_MIN_DECISIONS": "3",
+        "APERTURE_AUTO_APPROVE_THRESHOLD": "0.80"
+      }
+    }
+  }
+}
+```
+
+The low thresholds (`3` decisions, `0.80` approval rate) let you see the learning loop quickly. For production, use the defaults (`10` decisions, `0.95` threshold).
+
+**4. Add the system prompt**
+
+Create `system_prompt.md` in the same directory. This tells OpenClaw how to use Aperture's MCP tools:
+
+```markdown
+Before using any tool (reading files, running commands, making API calls),
+call `check_permission` first:
+
+  check_permission(tool="filesystem", action="read", scope="README.md")
+
+- **"allow"**: Proceed with the action.
+- **"deny"**: Do NOT proceed. Ask the user if they want to approve it.
+- **"ask"**: Do NOT proceed. Show the user the risk assessment and ask for approval.
+
+When the user approves, call `approve_action`. When they deny, call `deny_action`.
+After a few consistent approvals, Aperture auto-approves similar actions.
+```
+
+See [`examples/system_prompt.md`](examples/system_prompt.md) for the full version.
+
+**5. Start chatting**
+
+```bash
+openclaw chat
+```
+
+**What happens:**
+
+```
+You:    "Read the file README.md"
+Agent:  → calls check_permission(tool="filesystem", action="read", scope="README.md")
+        ← DENY (no history)
+Agent:  "This action was denied. Want to approve it?"
+You:    "Yes"
+Agent:  → calls approve_action(...)
+
+... repeat 2 more times ...
+
+You:    "Read setup.py"
+Agent:  → calls check_permission(tool="filesystem", action="read", scope="setup.py")
+        ← ALLOW (auto_learned)
+Agent:  "Aperture auto-approved this — it learned from your previous decisions."
+```
+
+**Quick demo (no OpenClaw needed)**
+
+To see the learning loop without installing OpenClaw:
+
+```bash
+python examples/openclaw_demo.py --sim
+```
+
+This runs the full deny → approve → auto-approve cycle using Aperture's API directly.
+
 ### Python library
 
 ```python
