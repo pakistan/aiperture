@@ -58,21 +58,49 @@ Aperture fixes this. It sits between your agent runtime and the outside world, l
 
 **Day 7** — The only popups you see are for genuinely new or risky actions. Everything routine is auto-approved. Everything dangerous is auto-denied. Your agent moves faster and you have a full audit trail of every decision.
 
-## Quick start
+## Getting started
+
+### 1. Install
 
 ```bash
-pip install aperture-ai       # Install from PyPI
-aperture init-db              # Initialize the database
-aperture serve                # Start the API server on localhost:8100
+pip install aperture-ai
 ```
 
-That's it. Aperture is running. Now connect your agent runtime.
+Requires Python 3.12+. This installs the `aperture` CLI and the Python package.
 
-## Connect your runtime
+Verify it worked:
 
-### Claude Code (MCP)
+```bash
+aperture --help
+```
 
-Add to your `.mcp.json`:
+You should see:
+
+```
+Aperture — The permission layer for AI agents
+
+Commands:
+  mcp-serve    Run as MCP server (stdio transport)
+  serve        Run HTTP API server
+  init-db      Initialize the database
+  configure    Interactive setup wizard
+```
+
+### 2. Initialize
+
+```bash
+aperture init-db
+```
+
+This creates `aperture.db` in your current directory (SQLite). That's where all permission decisions, learned patterns, and audit logs are stored.
+
+### 3. Connect your agent runtime
+
+Pick whichever runtime you use:
+
+#### Claude Code
+
+Add to your `.mcp.json` (project root or `~/.claude/`):
 
 ```json
 {
@@ -86,13 +114,17 @@ Add to your `.mcp.json`:
 }
 ```
 
-This gives Claude Code 9 tools including `check_permission`, `approve_action`, `deny_action`, `store_artifact`, and `get_audit_trail`.
+Start Claude Code. It now has 9 Aperture tools — `check_permission`, `approve_action`, `deny_action`, `explain_action`, `get_permission_patterns`, `store_artifact`, `verify_artifact`, `get_cost_summary`, and `get_audit_trail`.
 
-**[Full Claude Code setup guide →](docs/setup-claude-code.md)**
+**[Full Claude Code guide →](docs/setup-claude-code.md)** — includes learning loop diagram, tuning, and troubleshooting.
 
-### OpenClaw
+#### OpenClaw
 
-Add Aperture as OpenClaw's MCP permission server:
+```bash
+npm install -g openclaw@latest
+```
+
+Create `openclaw.json` in your project root:
 
 ```json
 {
@@ -108,13 +140,17 @@ Add Aperture as OpenClaw's MCP permission server:
 }
 ```
 
-Add a [system prompt](examples/system_prompt.md) that tells the agent to call `check_permission` before every action, then `openclaw chat`.
+Add a [system prompt](examples/system_prompt.md) that tells the agent to call `check_permission` before every action, then run `openclaw chat`.
 
-**[Full OpenClaw setup guide →](docs/setup-openclaw.md)**
+**[Full OpenClaw guide →](docs/setup-openclaw.md)** — includes step-by-step walkthrough, demo mode, and production settings.
 
-### REST API
+#### REST API
 
-Any agent runtime can use the HTTP API:
+Start the server and point any agent runtime at it:
+
+```bash
+aperture serve    # Runs on localhost:8100
+```
 
 ```bash
 # Check a permission
@@ -131,7 +167,7 @@ curl -X POST localhost:8100/permissions/record \
   }'
 ```
 
-### Python library
+#### Python library
 
 ```python
 from aperture.permissions import PermissionEngine
@@ -152,6 +188,41 @@ engine.record_human_decision(
 # After enough decisions, the engine auto-approves
 verdict = engine.check("shell", "execute", "npm test", rules=[])
 print(verdict.decision)  # PermissionDecision.ALLOW
+```
+
+### 4. What to expect
+
+Once connected, here's what your first week looks like:
+
+**First session** — Every action your agent tries gets checked. Since Aperture has no history yet, most things are denied. You'll approve the safe ones (reading files, running tests, git commands). This is normal — Aperture is building its model of your preferences.
+
+**After ~10 approvals per action** — Aperture starts auto-approving the patterns you've consistently allowed. `git status`? Auto-approved. `npm test`? Auto-approved. You stop seeing prompts for routine actions.
+
+**Dangerous actions stay flagged** — `rm -rf`, `DROP TABLE`, shell commands touching production paths — these are scored as HIGH/CRITICAL risk and always require your explicit approval, no matter how many times you've approved other things.
+
+**You can check what it learned at any time:**
+
+```bash
+# Via the API
+curl localhost:8100/permissions/patterns?min_decisions=5
+
+# Or ask your agent
+"Show me what Aperture has learned"
+```
+
+**Optional: tune the learning speed**
+
+The defaults (10 decisions, 95% approval rate) are conservative. To make Aperture learn faster, run the interactive wizard:
+
+```bash
+aperture configure
+```
+
+Or set environment variables directly:
+
+```bash
+export APERTURE_PERMISSION_LEARNING_MIN_DECISIONS=5
+export APERTURE_AUTO_APPROVE_THRESHOLD=0.90
 ```
 
 ## Features

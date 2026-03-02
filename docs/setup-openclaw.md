@@ -102,9 +102,23 @@ A complete version is available at [`examples/system_prompt.md`](../examples/sys
 openclaw chat
 ```
 
+## What to expect on first use
+
+When you start your first OpenClaw session with Aperture:
+
+1. **Every action starts as denied** — Aperture has no history, so the first time the agent tries to read a file, run a command, or call an API, Aperture denies it. The agent will ask for your approval.
+
+2. **You approve the safe stuff** — Say yes to things like reading files, running tests, git commands. Say no to anything you wouldn't want an agent doing unsupervised.
+
+3. **Aperture counts your decisions** — With the demo thresholds above (`3` decisions, `0.80` rate), it only takes 3 approvals before Aperture starts auto-approving that action type. With production defaults, it takes 10.
+
+4. **Auto-approval kicks in** — Once Aperture has seen enough consistent approvals, it returns `ALLOW` with `decided_by: auto_learned`. The agent proceeds without asking you. You'll notice the prompts getting less frequent as the session goes on.
+
+5. **Dangerous actions stay flagged** — High-risk commands (`rm -rf`, `DROP TABLE`, broad wildcards) are always scored as HIGH/CRITICAL and require your explicit approval, no matter how many other things you've approved.
+
 ## What the learning loop looks like
 
-Here's what happens in a typical session:
+Here's what the above looks like in a real conversation:
 
 ### First time — Aperture denies (no history)
 
@@ -235,11 +249,12 @@ npm install -g openclaw@latest
 
 **"aperture: command not found"**
 
-Make sure the virtual environment where you installed Aperture is activated:
-
 ```bash
+pip install aperture-ai
 which aperture   # Should print a path
 ```
+
+If you're using a virtual environment, make sure it's activated.
 
 **Agent isn't calling check_permission**
 

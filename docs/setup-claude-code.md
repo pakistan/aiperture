@@ -47,7 +47,23 @@ If you already have other MCP servers configured, add the `"aperture"` key insid
 
 ## Step 4: Start using Claude Code
 
-That's it. Claude Code now has access to 9 Aperture tools:
+That's it. Restart Claude Code (or open a new session) and Aperture is active.
+
+### What to expect on first use
+
+When you start your first Claude Code session with Aperture:
+
+1. **Claude sees the 9 Aperture tools** — it can call `check_permission`, `approve_action`, `deny_action`, `explain_action`, `get_permission_patterns`, `store_artifact`, `verify_artifact`, `get_cost_summary`, and `get_audit_trail`.
+
+2. **Everything starts as denied** — Aperture has no history yet, so the first time Claude tries to read a file or run a command, it will be denied. Claude will ask you to approve it.
+
+3. **You approve the safe stuff** — When Claude says "Aperture denied this, want to approve?", say yes for things like `git status`, `cat README.md`, `npm test`. Say no for anything you wouldn't want an agent doing unsupervised.
+
+4. **Aperture learns your preferences** — After 10 consistent approvals of the same action type (e.g., `filesystem.read`), Aperture auto-approves it going forward. You stop getting asked.
+
+5. **Dangerous actions stay flagged** — `rm -rf`, shell commands with broad wildcards, anything touching system paths — these are scored as HIGH/CRITICAL risk and always require your explicit approval.
+
+This is what it looks like in practice:
 
 | Tool | What it does |
 |------|-------------|
@@ -159,12 +175,12 @@ curl localhost:8100/config
 
 **"aperture: command not found"**
 
-Make sure the virtual environment where you installed Aperture is activated, or install it globally:
-
 ```bash
-pip install -e ".[dev]"
+pip install aperture-ai
 which aperture   # Should print a path
 ```
+
+If you're using a virtual environment, make sure it's activated. If you installed globally, make sure your Python scripts directory is on your PATH.
 
 **Permissions aren't being learned**
 
