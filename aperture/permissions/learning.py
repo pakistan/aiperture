@@ -49,6 +49,12 @@ class PermissionLearner:
         self.decay_half_life_days = decay_half_life_days
         self.fatigue_threshold = fatigue_threshold
 
+    @property
+    def _settings(self):
+        """Lazy access to the config singleton so thresholds stay in sync at runtime."""
+        import aperture.config
+        return aperture.config.settings
+
     def detect_patterns(
         self,
         organization_id: str = "default",
@@ -248,14 +254,18 @@ class PermissionLearner:
             )
 
         # Auto-approve: strong signal
-        if rate >= 0.95 and total >= 10:
+        approve_threshold = self._settings.auto_approve_threshold
+        deny_threshold = self._settings.auto_deny_threshold
+        min_decisions = self._settings.permission_learning_min_decisions
+
+        if rate >= approve_threshold and total >= min_decisions:
             return (
                 "auto_approve",
                 f"Strong approve — {rate:.0%} rate across {total} decisions by {num_humans} human(s).",
             )
 
         # Auto-deny: strong deny signal
-        if rate <= 0.05 and total >= 10:
+        if rate <= deny_threshold and total >= min_decisions:
             return (
                 "auto_deny",
                 f"Strong deny — {rate:.0%} approval rate across {total} decisions by {num_humans} human(s).",

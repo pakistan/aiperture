@@ -420,21 +420,26 @@ class PermissionEngine:
         risk: RiskAssessment,
     ) -> tuple[str, str]:
         """Compute recommendation based on all signals."""
+        import aperture.config
+        approve_threshold = aperture.config.settings.auto_approve_threshold
+        deny_threshold = aperture.config.settings.auto_deny_threshold
+        min_decisions = aperture.config.settings.permission_learning_min_decisions
+
         if org_signal:
-            if org_signal.allow_rate >= 0.95 and org_signal.total_decisions >= 10:
+            if org_signal.allow_rate >= approve_threshold and org_signal.total_decisions >= min_decisions:
                 return (
                     "auto_approve",
                     f"Strong approve — {org_signal.allow_rate:.0%} rate, "
                     f"{org_signal.total_decisions} decisions, "
                     f"{org_signal.unique_humans} reviewer(s).",
                 )
-            if org_signal.allow_rate <= 0.05 and org_signal.total_decisions >= 10:
+            if org_signal.allow_rate <= deny_threshold and org_signal.total_decisions >= min_decisions:
                 return (
                     "auto_deny",
                     f"Strong deny — {org_signal.allow_rate:.0%} rate, "
                     f"{org_signal.total_decisions} decisions.",
                 )
-            if org_signal.total_decisions >= 10 and 0.85 <= org_signal.allow_rate < 0.95:
+            if org_signal.total_decisions >= min_decisions and 0.85 <= org_signal.allow_rate < approve_threshold:
                 return (
                     "suggest_rule",
                     f"Approved {org_signal.allow_rate:.0%} of the time across "
