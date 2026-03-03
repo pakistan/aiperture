@@ -5,7 +5,6 @@ This is the compliance backbone.
 """
 
 from datetime import datetime
-from typing import Optional
 
 from fastapi import APIRouter, HTTPException
 
@@ -18,13 +17,13 @@ store = AuditStore()
 @router.get("/events")
 def list_events(
     organization_id: str = "default",
-    event_type: Optional[str] = None,
-    entity_type: Optional[str] = None,
-    entity_id: Optional[str] = None,
-    actor_id: Optional[str] = None,
-    runtime_id: Optional[str] = None,
-    since: Optional[str] = None,
-    until: Optional[str] = None,
+    event_type: str | None = None,
+    entity_type: str | None = None,
+    entity_id: str | None = None,
+    actor_id: str | None = None,
+    runtime_id: str | None = None,
+    since: str | None = None,
+    until: str | None = None,
     limit: int = 100,
     offset: int = 0,
 ):

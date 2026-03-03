@@ -1,8 +1,7 @@
 """Permission models — RBAC + ReBAC for AI agent actions."""
 
 import enum
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 
 from pydantic import BaseModel
 from sqlmodel import Field, SQLModel
@@ -28,7 +27,7 @@ class PermissionLog(SQLModel, table=True):
 
     __tablename__ = "permission_logs"
 
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: int | None = Field(default=None, primary_key=True)
     organization_id: str = Field(default="default", index=True)
     task_id: str = Field(default="", index=True)
     session_id: str = Field(default="", index=True)
@@ -40,7 +39,8 @@ class PermissionLog(SQLModel, table=True):
     context_summary: str = ""
     resource: str = Field(default="", index=True)  # normalized target (intent-based matching)
     runtime_id: str = Field(default="", index=True)  # which external runtime asked
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC).replace(tzinfo=None))
+    revoked_at: datetime | None = Field(default=None)  # soft-delete for revocation
 
 
 class TaskPermissionStatus(str, enum.Enum):
@@ -56,7 +56,7 @@ class TaskPermission(SQLModel, table=True):
 
     __tablename__ = "task_permissions"
 
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: int | None = Field(default=None, primary_key=True)
     permission_id: str = Field(index=True)  # unique ID for this grant
     task_id: str = Field(index=True)
     organization_id: str = Field(default="default", index=True)
@@ -66,5 +66,5 @@ class TaskPermission(SQLModel, table=True):
     decision: str  # PermissionDecision value
     status: str = TaskPermissionStatus.ACTIVE
     granted_by: str = ""
-    expires_at: Optional[datetime] = None
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    expires_at: datetime | None = None
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC).replace(tzinfo=None))

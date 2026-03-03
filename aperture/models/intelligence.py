@@ -1,7 +1,6 @@
 """Global intelligence models — cross-org anonymized stats with differential privacy."""
 
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 
 from sqlmodel import Field, SQLModel
 
@@ -11,7 +10,7 @@ class GlobalPermissionStat(SQLModel, table=True):
 
     __tablename__ = "global_permission_stats"
 
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: int | None = Field(default=None, primary_key=True)
     tool: str = Field(index=True)
     action: str = Field(index=True)
     scope_pattern: str = Field(index=True)  # generalized scope (privacy-preserving)
@@ -22,4 +21,4 @@ class GlobalPermissionStat(SQLModel, table=True):
     estimated_allow_rate: float = 0.0  # debiased from noisy counts
     confidence_low: float = 0.0
     confidence_high: float = 1.0
-    last_updated: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    last_updated: datetime = Field(default_factory=lambda: datetime.now(UTC).replace(tzinfo=None))

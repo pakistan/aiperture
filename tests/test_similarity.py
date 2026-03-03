@@ -6,13 +6,12 @@ from aperture.db import get_engine
 from aperture.models import PermissionDecision, PermissionLog, SimilarPattern
 from aperture.permissions import find_similar_patterns
 from aperture.permissions.similarity import (
+    _command_similarity,
+    _path_prefix_similarity,
+    resource_similarity,
     scope_similarity,
     tool_action_similarity,
-    resource_similarity,
-    _path_prefix_similarity,
-    _command_similarity,
 )
-
 
 # ── Wiring test ──────────────────────────────────────────────────────
 
@@ -403,6 +402,7 @@ class TestFindSimilarPatternsIntegrationWithEngine:
 
     def test_enriched_verdict_includes_similar_patterns(self):
         """PermissionEngine.check(enrich=True) populates similar_patterns from DB history."""
+        from aperture.permissions.challenge import create_challenge
         from aperture.permissions.engine import PermissionEngine
 
         engine = PermissionEngine()
@@ -410,6 +410,7 @@ class TestFindSimilarPatternsIntegrationWithEngine:
         # Record several human decisions for similar scopes
         for scope in ["src/utils.py", "src/helpers.py", "src/constants.py"]:
             for user in ["user-1", "user-2"]:
+                ch = create_challenge("filesystem", "read", scope)
                 engine.record_human_decision(
                     tool="filesystem",
                     action="read",
@@ -417,6 +418,9 @@ class TestFindSimilarPatternsIntegrationWithEngine:
                     decision=PermissionDecision.ALLOW,
                     decided_by=user,
                     organization_id="default",
+                    challenge=ch.token,
+                    challenge_nonce=ch.nonce,
+                    challenge_issued_at=ch.issued_at,
                 )
 
         # Check a similar but not identical scope with enrichment

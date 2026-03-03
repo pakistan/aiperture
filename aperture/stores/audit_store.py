@@ -7,7 +7,6 @@ gets an audit event. This is the compliance backbone.
 import logging
 import uuid
 from datetime import datetime
-from typing import Optional
 
 from sqlalchemy import func
 from sqlmodel import Session, select
@@ -32,9 +31,9 @@ class AuditStore:
         actor_id: str = "",
         actor_type: str = "",
         runtime_id: str = "",
-        details: Optional[dict] = None,
-        previous_state: Optional[dict] = None,
-        new_state: Optional[dict] = None,
+        details: dict | None = None,
+        previous_state: dict | None = None,
+        new_state: dict | None = None,
         batch_id: str = "",
     ) -> AuditEvent:
         """Record an audit event. Fire-and-forget — never breaks the caller."""
@@ -67,13 +66,13 @@ class AuditStore:
         self,
         organization_id: str = "default",
         *,
-        event_type: Optional[str] = None,
-        entity_type: Optional[str] = None,
-        entity_id: Optional[str] = None,
-        actor_id: Optional[str] = None,
-        runtime_id: Optional[str] = None,
-        since: Optional[datetime] = None,
-        until: Optional[datetime] = None,
+        event_type: str | None = None,
+        entity_type: str | None = None,
+        entity_id: str | None = None,
+        actor_id: str | None = None,
+        runtime_id: str | None = None,
+        since: datetime | None = None,
+        until: datetime | None = None,
         limit: int = 100,
         offset: int = 0,
     ) -> list[AuditEvent]:
@@ -103,7 +102,7 @@ class AuditStore:
                 session.expunge(r)
             return list(results)
 
-    def get_event(self, event_id: str) -> Optional[AuditEvent]:
+    def get_event(self, event_id: str) -> AuditEvent | None:
         """Get a single audit event."""
         with Session(get_engine()) as session:
             result = session.exec(

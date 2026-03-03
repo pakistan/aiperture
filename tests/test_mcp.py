@@ -16,6 +16,7 @@ from aperture.mcp_server import (
     deny_action,
     explain_action,
     get_audit_trail,
+    get_config,
     get_cost_summary,
     get_permission_patterns,
     store_artifact,
@@ -23,11 +24,21 @@ from aperture.mcp_server import (
 )
 
 
+def _get_challenge(tool: str, action: str, scope: str) -> dict:
+    """Helper: call check_permission and extract challenge fields from the verdict."""
+    result = json.loads(check_permission(tool=tool, action=action, scope=scope))
+    return {
+        "challenge": result.get("challenge", ""),
+        "challenge_nonce": result.get("challenge_nonce", ""),
+        "challenge_issued_at": result.get("challenge_issued_at", 0.0),
+    }
+
+
 # ---- Wiring test --------------------------------------------------------
 
 
 class TestMCPToolsImportable:
-    """Wiring: all 9 MCP tools are importable from aperture.mcp_server."""
+    """Wiring: all MCP tools are importable from aperture.mcp_server."""
 
     def test_all_tools_importable(self):
         """Every MCP tool function is importable from the public module."""
@@ -41,8 +52,14 @@ class TestMCPToolsImportable:
             verify_artifact,
             get_cost_summary,
             get_audit_trail,
+            get_config,
         ):
             assert callable(fn), f"{fn.__name__} is not callable"
+
+    def test_update_config_not_exposed(self):
+        """update_config is NOT an MCP tool — config changes only via CLI/REST."""
+        import aperture.mcp_server as mod
+        assert not hasattr(mod, "update_config"), "update_config should not be an MCP tool"
 
 
 # ---- check_permission ----------------------------------------------------
@@ -73,6 +90,16 @@ class TestCheckPermission:
             scope="production/db.conf",
         ))
         assert result["decision"] == "deny"
+
+    def test_check_permission_deny_has_challenge(self):
+        """DENY verdict includes HMAC challenge for approve/deny flow."""
+        result = json.loads(check_permission(
+            tool="shell", action="execute", scope="deploy.sh",
+        ))
+        assert result["decision"] == "deny"
+        assert result["challenge"]
+        assert result["challenge_nonce"]
+        assert result["challenge_issued_at"] > 0
 
     def test_check_permission_critical_risk_rm_rf(self):
         """rm -rf / is always CRITICAL risk."""
@@ -114,13 +141,17 @@ class TestCheckPermission:
 
     def test_check_permission_with_session_id(self):
         """Session memory: approve once, then check with same session reuses decision."""
-        # First record a human approval with session
+        # First get a challenge
+        ch = _get_challenge("shell", "execute", "test.sh")
+
+        # Record a human approval with session
         approve_action(
             tool="shell",
             action="execute",
             scope="test.sh",
             decided_by="user-1",
             session_id="session-xyz",
+            **ch,
         )
 
         # Now check with same session_id — should be allowed from session memory
@@ -138,29 +169,56 @@ class TestCheckPermission:
 
 
 class TestApproveAction:
-    """approve_action records a human approval."""
+    """approve_action records a human approval (requires valid challenge)."""
 
-    def test_approve_returns_recorded_true(self):
-        """Response includes recorded: true and decision: allow."""
+    def test_approve_with_valid_challenge(self):
+        """Response includes recorded: true with valid challenge."""
+        ch = _get_challenge("filesystem", "read", "src/*.py")
         result = json.loads(approve_action(
             tool="filesystem",
             action="read",
             scope="src/*.py",
             decided_by="admin",
+            **ch,
         ))
         assert result["recorded"] is True
         assert result["decision"] == "allow"
         assert result["tool"] == "filesystem"
         assert result["scope"] == "src/*.py"
 
+    def test_approve_without_challenge_raises(self):
+        """Approve without challenge raises ToolError."""
+        with pytest.raises(ToolError, match="challenge"):
+            approve_action(
+                tool="filesystem",
+                action="read",
+                scope="src/*.py",
+                decided_by="admin",
+            )
+
+    def test_approve_with_fabricated_challenge_raises(self):
+        """Fabricated challenge is rejected."""
+        with pytest.raises(ToolError, match="challenge"):
+            approve_action(
+                tool="filesystem",
+                action="read",
+                scope="src/*.py",
+                decided_by="admin",
+                challenge="fake_token",
+                challenge_nonce="fake_nonce",
+                challenge_issued_at=0.0,
+            )
+
     def test_approve_with_task_id_creates_grant(self):
         """When task_id is provided, a task-scoped grant is also created."""
+        ch = _get_challenge("shell", "execute", "deploy.sh")
         approve_action(
             tool="shell",
             action="execute",
             scope="deploy.sh",
             decided_by="admin",
             task_id="task-42",
+            **ch,
         )
 
         # The task grant should make subsequent checks pass
@@ -174,23 +232,27 @@ class TestApproveAction:
 
     def test_approve_with_reasoning(self):
         """Reasoning is accepted without error."""
+        ch = _get_challenge("api", "post", "users/create")
         result = json.loads(approve_action(
             tool="api",
             action="post",
             scope="users/create",
             decided_by="admin",
             reasoning="Needed for onboarding workflow",
+            **ch,
         ))
         assert result["recorded"] is True
 
     def test_approve_with_organization_id(self):
         """Custom organization_id is accepted."""
+        ch = _get_challenge("filesystem", "read", "docs/*")
         result = json.loads(approve_action(
             tool="filesystem",
             action="read",
             scope="docs/*",
             decided_by="user-1",
             organization_id="acme-corp",
+            **ch,
         ))
         assert result["recorded"] is True
 
@@ -199,29 +261,43 @@ class TestApproveAction:
 
 
 class TestDenyAction:
-    """deny_action records a human denial."""
+    """deny_action records a human denial (requires valid challenge)."""
 
-    def test_deny_returns_recorded_true(self):
-        """Response includes recorded: true and decision: deny."""
+    def test_deny_with_valid_challenge(self):
+        """Response includes recorded: true with valid challenge."""
+        ch = _get_challenge("shell", "execute", "rm -rf /")
         result = json.loads(deny_action(
             tool="shell",
             action="execute",
             scope="rm -rf /",
             decided_by="admin",
+            **ch,
         ))
         assert result["recorded"] is True
         assert result["decision"] == "deny"
         assert result["tool"] == "shell"
         assert result["scope"] == "rm -rf /"
 
+    def test_deny_without_challenge_raises(self):
+        """Deny without challenge raises ToolError."""
+        with pytest.raises(ToolError, match="challenge"):
+            deny_action(
+                tool="shell",
+                action="execute",
+                scope="rm -rf /",
+                decided_by="admin",
+            )
+
     def test_deny_with_session_id(self):
         """Denial with session_id caches the denial for the session."""
+        ch = _get_challenge("shell", "execute", "dangerous.sh")
         deny_action(
             tool="shell",
             action="execute",
             scope="dangerous.sh",
             decided_by="admin",
             session_id="session-block",
+            **ch,
         )
 
         # Same check with same session_id should be denied
@@ -236,12 +312,14 @@ class TestDenyAction:
 
     def test_deny_with_reasoning(self):
         """Reasoning is accepted for audit trail."""
+        ch = _get_challenge("database", "drop", "users_table")
         result = json.loads(deny_action(
             tool="database",
             action="drop",
             scope="users_table",
             decided_by="dba",
             reasoning="Never drop production tables",
+            **ch,
         ))
         assert result["recorded"] is True
 
@@ -330,10 +408,12 @@ class TestGetPermissionPatterns:
         import aperture.config
         aperture.config.settings.permission_learning_enabled = False  # don't auto-decide
 
-        # Record 10 human approvals for the same pattern
+        # Record 10 human approvals for the same pattern (bypass engine, insert directly)
         from aperture.mcp_server import _engine
+        from aperture.permissions.challenge import create_challenge
 
         for i in range(10):
+            ch = create_challenge("filesystem", "read", "docs/*")
             _engine.record_human_decision(
                 tool="filesystem",
                 action="read",
@@ -341,6 +421,9 @@ class TestGetPermissionPatterns:
                 decision=__import__("aperture.models.permission", fromlist=["PermissionDecision"]).PermissionDecision.ALLOW,
                 decided_by=f"user-{i % 3}",
                 organization_id="default",
+                challenge=ch.token,
+                challenge_nonce=ch.nonce,
+                challenge_issued_at=ch.issued_at,
             )
 
         result = get_permission_patterns(min_decisions=5)
@@ -614,13 +697,16 @@ class TestEndToEndWorkflow:
         ))
         assert r1["decision"] == "deny"
 
-        # Step 2: Human approves
+        # Step 2: Human approves (using challenge from step 1)
         approve = json.loads(approve_action(
             tool="shell",
             action="execute",
             scope="deploy.sh",
             decided_by="admin",
             session_id="session-e2e",
+            challenge=r1["challenge"],
+            challenge_nonce=r1["challenge_nonce"],
+            challenge_issued_at=r1["challenge_issued_at"],
         ))
         assert approve["recorded"] is True
 
@@ -665,12 +751,14 @@ class TestEndToEndWorkflow:
 
     def test_deny_persists_in_session(self):
         """Denied actions stay denied for the session."""
+        ch = _get_challenge("database", "drop", "production.users")
         deny_action(
             tool="database",
             action="drop",
             scope="production.users",
             decided_by="dba",
             session_id="session-safe",
+            **ch,
         )
 
         result = json.loads(check_permission(
@@ -681,3 +769,24 @@ class TestEndToEndWorkflow:
         ))
         assert result["decision"] == "deny"
         assert result["decided_by"] == "session_memory"
+
+    def test_agent_self_approval_blocked(self):
+        """Agent cannot self-approve without a valid challenge token."""
+        # Step 1: Check → denied
+        r1 = json.loads(check_permission(
+            tool="shell", action="execute", scope="dangerous.sh",
+        ))
+        assert r1["decision"] == "deny"
+
+        # Step 2: Agent tries to approve without challenge → blocked
+        with pytest.raises(ToolError, match="challenge"):
+            approve_action(
+                tool="shell", action="execute", scope="dangerous.sh",
+                decided_by="user",
+            )
+
+        # Step 3: Still denied
+        r2 = json.loads(check_permission(
+            tool="shell", action="execute", scope="dangerous.sh",
+        ))
+        assert r2["decision"] == "deny"

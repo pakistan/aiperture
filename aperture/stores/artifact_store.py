@@ -7,9 +7,8 @@ re-verified at any time without an LLM.
 import hashlib
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Optional
 
 from sqlmodel import Session, select
 
@@ -37,9 +36,9 @@ class ArtifactStore:
         task_id: str = "",
         runtime_id: str = "",
         tool_name: str = "",
-        tool_args: Optional[dict] = None,
+        tool_args: dict | None = None,
         summary: str = "",
-        extra: Optional[dict] = None,
+        extra: dict | None = None,
         tokens_input: int = 0,
         tokens_output: int = 0,
         cost_usd: float = 0.0,
@@ -82,7 +81,7 @@ class ArtifactStore:
             storage_backend="inline",
             verification_method=VerificationMethod.HASH_CHECK,
             verification_status=VerificationStatus.VERIFIED,
-            verified_at=datetime.now(timezone.utc).replace(tzinfo=None),
+            verified_at=datetime.now(UTC).replace(tzinfo=None),
             tool_name=tool_name,
             tool_args=tool_args,
             summary=summary,
@@ -102,7 +101,7 @@ class ArtifactStore:
 
         return artifact
 
-    def get(self, artifact_id: str) -> Optional[Artifact]:
+    def get(self, artifact_id: str) -> Artifact | None:
         """Retrieve an artifact by ID."""
         with Session(get_engine()) as session:
             result = session.exec(
@@ -160,7 +159,7 @@ class ArtifactStore:
 
             if current_hash == artifact.content_hash:
                 artifact.verification_status = VerificationStatus.VERIFIED
-                artifact.verified_at = datetime.now(timezone.utc).replace(tzinfo=None)
+                artifact.verified_at = datetime.now(UTC).replace(tzinfo=None)
             else:
                 artifact.verification_status = VerificationStatus.FAILED
 
@@ -173,8 +172,8 @@ class ArtifactStore:
     def get_cost_summary(
         self,
         organization_id: str = "default",
-        task_id: Optional[str] = None,
-        runtime_id: Optional[str] = None,
+        task_id: str | None = None,
+        runtime_id: str | None = None,
     ) -> dict:
         """Get cost summary across artifacts."""
         with Session(get_engine()) as session:

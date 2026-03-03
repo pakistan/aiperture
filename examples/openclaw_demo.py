@@ -23,7 +23,6 @@ import sys
 import tempfile
 from pathlib import Path
 
-
 # ── Utility ──────────────────────────────────────────────────────────
 
 
@@ -125,11 +124,10 @@ def run_real_openclaw_demo() -> None:
         # 6. Show the Aperture audit trail (if anything was recorded)
         print("\n[5/6] Checking Aperture audit trail ...")
         try:
-            from aperture.db import init_db, reset_engine
-            from aperture.stores.audit_store import AuditStore
-
             import aperture.config
             from aperture.config import Settings
+            from aperture.db import reset_engine
+            from aperture.stores.audit_store import AuditStore
 
             aperture.config.settings = Settings(
                 db_path=str(workspace / "aperture.db"),
@@ -198,7 +196,7 @@ def run_simulated_demo() -> None:
         assert verdict["decision"] == "deny", "Expected deny with no history"
 
         # --- Step 2: Human approves `git status` x5 ---
-        print(f"\n[Step 2] Human approves `git status` 5 times ...")
+        print("\n[Step 2] Human approves `git status` 5 times ...")
         for i in range(5):
             resp = client.post("/permissions/record", json={
                 "tool": "shell",

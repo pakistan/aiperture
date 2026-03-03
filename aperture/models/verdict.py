@@ -7,7 +7,6 @@ command explanation, crowd signals, similar patterns, and actionable context.
 import enum
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Optional
 
 from aperture.models.permission import PermissionDecision
 
@@ -40,8 +39,8 @@ class OrgSignal:
     unique_humans: int
     trend: str  # "toward_approve" | "toward_deny" | "stable" | "mixed" | "new" | "insufficient_data"
     velocity: float  # decisions per day
-    last_decision_at: Optional[datetime] = None
-    first_decision_at: Optional[datetime] = None
+    last_decision_at: datetime | None = None
+    first_decision_at: datetime | None = None
 
 
 @dataclass
@@ -100,6 +99,14 @@ class PermissionVerdict:
     recommendation: str = ""  # human-readable action suggestion
     recommendation_code: str = "keep_asking"  # "auto_approve" / "review" / "keep_asking" / "suggest_rule" / "caution"
 
+    # Content awareness
+    content_changed: bool = False  # True when same (tool, action, scope) seen with different content_hash
+
+    # HMAC challenge for human approval (only present when decision != ALLOW)
+    challenge: str = ""
+    challenge_nonce: str = ""
+    challenge_issued_at: float = 0.0
+
     def to_dict(self) -> dict:
         """Serialize to JSON-compatible dict."""
         result = {
@@ -156,5 +163,13 @@ class PermissionVerdict:
 
         if self.auto_approve_distance is not None:
             result["auto_approve_distance"] = self.auto_approve_distance
+
+        if self.content_changed:
+            result["content_changed"] = True
+
+        if self.challenge:
+            result["challenge"] = self.challenge
+            result["challenge_nonce"] = self.challenge_nonce
+            result["challenge_issued_at"] = self.challenge_issued_at
 
         return result

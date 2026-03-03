@@ -1,6 +1,5 @@
 """Tests for the cross-org anonymized intelligence engine."""
 
-import math
 
 from aperture.permissions import IntelligenceEngine
 from aperture.permissions.intelligence import (

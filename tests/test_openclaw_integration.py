@@ -10,15 +10,41 @@ Three test tiers:
 """
 
 import json
-import shutil
 import sys
 from pathlib import Path
 
-import pytest
 from fastapi.testclient import TestClient
 
 import aperture.config
 from aperture.api import create_app
+
+
+def _api_challenge(client, tool: str, action: str, scope: str) -> dict:
+    """Get challenge from the HTTP check endpoint."""
+    resp = client.post("/permissions/check", json={
+        "tool": tool, "action": action, "scope": scope, "permissions": [],
+    })
+    data = resp.json()
+    return {
+        "challenge": data.get("challenge", ""),
+        "challenge_nonce": data.get("challenge_nonce", ""),
+        "challenge_issued_at": data.get("challenge_issued_at", 0.0),
+    }
+
+
+async def _mcp_challenge(session, tool: str, action: str, scope: str,
+                          organization_id: str = "default") -> dict:
+    """Get challenge from the MCP check_permission tool."""
+    result = await session.call_tool("check_permission", {
+        "tool": tool, "action": action, "scope": scope,
+        "organization_id": organization_id,
+    })
+    data = json.loads(result.content[0].text)
+    return {
+        "challenge": data.get("challenge", ""),
+        "challenge_nonce": data.get("challenge_nonce", ""),
+        "challenge_issued_at": data.get("challenge_issued_at", 0.0),
+    }
 
 # Path to the examples/ directory (relative to repo root)
 EXAMPLES_DIR = Path(__file__).resolve().parent.parent / "examples"
@@ -104,6 +130,7 @@ class TestLearningLoop:
 
         # Record 5 approvals (meets min_decisions=5)
         for i in range(5):
+            ch = _api_challenge(client, "shell", "execute", "git status")
             resp = client.post("/permissions/record", json={
                 "tool": "shell",
                 "action": "execute",
@@ -111,6 +138,7 @@ class TestLearningLoop:
                 "decision": "allow",
                 "decided_by": f"user-{i % 3}",
                 "organization_id": "test-org",
+                **ch,
             })
             assert resp.status_code == 200
 
@@ -135,6 +163,7 @@ class TestLearningLoop:
 
         # Record 5 denials
         for i in range(5):
+            ch = _api_challenge(client, "shell", "execute", "rm -rf /")
             resp = client.post("/permissions/record", json={
                 "tool": "shell",
                 "action": "execute",
@@ -142,6 +171,7 @@ class TestLearningLoop:
                 "decision": "deny",
                 "decided_by": f"user-{i}",
                 "organization_id": "deny-org",
+                **ch,
             })
             assert resp.status_code == 200
 
@@ -174,6 +204,7 @@ class TestLearningLoop:
 
         # Record 3 approvals (meets new min_decisions=3)
         for i in range(3):
+            ch = _api_challenge(client, "filesystem", "read", "src/*.py")
             client.post("/permissions/record", json={
                 "tool": "filesystem",
                 "action": "read",
@@ -181,6 +212,7 @@ class TestLearningLoop:
                 "decision": "allow",
                 "decided_by": f"dev-{i}",
                 "organization_id": "config-test-org",
+                **ch,
             })
 
         # Should be auto-approved with the new lower thresholds
@@ -226,7 +258,10 @@ class TestMCPToolDiscovery:
         "get_cost_summary",
         "get_audit_trail",
         "get_config",
-        "update_config",
+        "report_tool_execution",
+        "get_compliance_report",
+        "revoke_permission_pattern",
+        "list_auto_approved_patterns",
     }
 
     async def test_server_identifies_as_aperture(self, tmp_path):
@@ -239,8 +274,8 @@ class TestMCPToolDiscovery:
                 result = await session.initialize()
                 assert result.serverInfo.name == "aperture"
 
-    async def test_lists_all_eleven_tools(self, tmp_path):
-        """MCP list_tools returns all 11 Aperture tools."""
+    async def test_lists_all_fourteen_tools(self, tmp_path):
+        """MCP list_tools returns all 14 Aperture tools."""
         from mcp import ClientSession, stdio_client
 
         params = _mcp_server_params(str(tmp_path / "test.db"))
@@ -321,11 +356,13 @@ class TestMCPPermissionCalls:
         async with stdio_client(params) as (read, write):
             async with ClientSession(read, write) as session:
                 await session.initialize()
+                ch = await _mcp_challenge(session, "filesystem", "read", "README.md")
                 result = await session.call_tool("approve_action", {
                     "tool": "filesystem",
                     "action": "read",
                     "scope": "README.md",
                     "decided_by": "test-user",
+                    **ch,
                 })
                 assert not result.isError
                 data = json.loads(result.content[0].text)
@@ -340,11 +377,13 @@ class TestMCPPermissionCalls:
         async with stdio_client(params) as (read, write):
             async with ClientSession(read, write) as session:
                 await session.initialize()
+                ch = await _mcp_challenge(session, "shell", "execute", "rm -rf /")
                 result = await session.call_tool("deny_action", {
                     "tool": "shell",
                     "action": "execute",
                     "scope": "rm -rf /",
                     "decided_by": "security-admin",
+                    **ch,
                 })
                 assert not result.isError
                 data = json.loads(result.content[0].text)
@@ -402,12 +441,17 @@ class TestMCPLearningLoop:
 
                 # Step 2: Human approves 3 times (meets min_decisions=3)
                 for i in range(3):
+                    ch = await _mcp_challenge(
+                        session, "filesystem", "read", "README.md",
+                        organization_id="mcp-test-org",
+                    )
                     result = await session.call_tool("approve_action", {
                         "tool": "filesystem",
                         "action": "read",
                         "scope": "README.md",
                         "decided_by": f"developer-{i}",
                         "organization_id": "mcp-test-org",
+                        **ch,
                     })
                     data = json.loads(result.content[0].text)
                     assert data["recorded"] is True
@@ -445,12 +489,17 @@ class TestMCPLearningLoop:
 
                 # Record 3 approvals
                 for i in range(3):
+                    ch = await _mcp_challenge(
+                        session, "shell", "execute", "npm test",
+                        organization_id="pattern-test-org",
+                    )
                     await session.call_tool("approve_action", {
                         "tool": "shell",
                         "action": "execute",
                         "scope": "npm test",
                         "decided_by": f"dev-{i}",
                         "organization_id": "pattern-test-org",
+                        **ch,
                     })
 
                 # Now patterns should be visible

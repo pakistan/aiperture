@@ -1,10 +1,9 @@
 """Artifact models — verified, hash-checked records of every AI agent output."""
 
 import enum
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 
-from sqlmodel import Column, Field, JSON, SQLModel
+from sqlmodel import JSON, Column, Field, SQLModel
 
 
 class ArtifactType(str, enum.Enum):
@@ -34,7 +33,7 @@ class Artifact(SQLModel, table=True):
 
     __tablename__ = "artifacts"
 
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: int | None = Field(default=None, primary_key=True)
     artifact_id: str = Field(index=True, unique=True)
     organization_id: str = Field(default="default", index=True)
     session_id: str = Field(default="", index=True)
@@ -51,13 +50,13 @@ class Artifact(SQLModel, table=True):
     # Verification
     verification_method: str = VerificationMethod.NONE
     verification_status: str = VerificationStatus.UNVERIFIED
-    verified_at: Optional[datetime] = None
+    verified_at: datetime | None = None
 
     # Metadata
     tool_name: str = ""  # if type=tool_call, which tool
-    tool_args: Optional[dict] = Field(default=None, sa_column=Column(JSON))
+    tool_args: dict | None = Field(default=None, sa_column=Column(JSON))
     summary: str = ""
-    extra: Optional[dict] = Field(default=None, sa_column=Column(JSON))
+    extra: dict | None = Field(default=None, sa_column=Column(JSON))
 
     # Cost tracking (reported by external runtime)
     tokens_input: int = 0
@@ -66,4 +65,4 @@ class Artifact(SQLModel, table=True):
     model_used: str = ""
     provider_used: str = ""
 
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC).replace(tzinfo=None))

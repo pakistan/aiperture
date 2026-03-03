@@ -12,7 +12,7 @@ Zero LLM cost. Pure database queries + statistics.
 import logging
 import math
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlmodel import Session, select
 
@@ -37,7 +37,7 @@ class PermissionPattern:
     recommendation: str  # "auto_approve", "auto_deny", "keep_asking", "review", "suggest_rule"
     recommendation_text: str = ""  # human-readable explanation
     confidence: float = 0.0  # 0.0-1.0
-    last_decision_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    last_decision_at: datetime = field(default_factory=lambda: datetime.now(UTC).replace(tzinfo=None))
     unique_humans: int = 0
     weighted_approval_rate: float = 0.0  # decay-weighted
 
@@ -64,7 +64,7 @@ class PermissionLearner:
         - Recommendation with human-readable explanation
         - Confidence based on sample size, humans, consistency, recency
         """
-        cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=lookback_days)
+        cutoff = datetime.now(UTC).replace(tzinfo=None) - timedelta(days=lookback_days)
 
         with Session(get_engine()) as session:
             logs = session.exec(
@@ -72,6 +72,7 @@ class PermissionLearner:
                     PermissionLog.organization_id == organization_id,
                     PermissionLog.decided_by.startswith("human:"),  # type: ignore[union-attr]
                     PermissionLog.created_at >= cutoff,  # type: ignore[operator]
+                    PermissionLog.revoked_at.is_(None),  # type: ignore[union-attr]  # exclude revoked
                 )
             ).all()
 
@@ -84,7 +85,7 @@ class PermissionLearner:
             key = (log.tool, log.action, log.scope)
             groups.setdefault(key, []).append(log)
 
-        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        now = datetime.now(UTC).replace(tzinfo=None)
         patterns = []
         for (tool, action, scope), decisions in groups.items():
             if len(decisions) < min_decisions:
@@ -138,7 +139,7 @@ class PermissionLearner:
         lookback_days: int = 30,
     ) -> dict:
         """Get summary statistics for permission decisions."""
-        cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=lookback_days)
+        cutoff = datetime.now(UTC).replace(tzinfo=None) - timedelta(days=lookback_days)
 
         with Session(get_engine()) as session:
             all_logs = session.exec(

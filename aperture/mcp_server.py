@@ -14,11 +14,11 @@ import logging
 import sys
 from contextlib import asynccontextmanager
 
-from mcp.server.fastmcp import Context, FastMCP
+from mcp.server.fastmcp import FastMCP
 from mcp.server.fastmcp.exceptions import ToolError
 
 from aperture.db import init_db
-from aperture.models.permission import Permission, PermissionDecision
+from aperture.models.permission import PermissionDecision
 from aperture.permissions.engine import PermissionEngine
 from aperture.permissions.intelligence import IntelligenceEngine
 from aperture.permissions.learning import PermissionLearner
@@ -67,6 +67,7 @@ def check_permission(
     task_id: str = "",
     session_id: str = "",
     organization_id: str = "default",
+    content_hash: str = "",
 ) -> str:
     """Check if an AI agent action is permitted.
 
@@ -85,6 +86,8 @@ def check_permission(
         task_id: Optional task ID for task-scoped permission grants
         session_id: Optional session ID for session memory (don't re-ask)
         organization_id: Tenant identifier
+        content_hash: Optional SHA-256 hash of content being written/modified.
+            Different hashes are treated as separate checks even for the same scope.
     """
     verdict = _engine.check(
         tool=tool,
@@ -96,7 +99,14 @@ def check_permission(
         organization_id=organization_id,
         runtime_id="mcp",
         enrich=True,
+        content_hash=content_hash,
     )
+
+    details = verdict.to_dict()
+    details["tool"] = tool
+    details["action"] = action
+    details["scope"] = scope
+    details["session_id"] = session_id
 
     _audit.record(
         event_type="permission.check",
@@ -106,7 +116,7 @@ def check_permission(
         entity_id=f"{tool}.{action}.{scope}",
         actor_type="runtime",
         runtime_id="mcp",
-        details=verdict.to_dict(),
+        details=details,
     )
 
     return json.dumps(verdict.to_dict(), indent=2)
@@ -118,6 +128,9 @@ def approve_action(
     action: str,
     scope: str,
     decided_by: str,
+    challenge: str = "",
+    challenge_nonce: str = "",
+    challenge_issued_at: float = 0.0,
     task_id: str = "",
     session_id: str = "",
     reasoning: str = "",
@@ -125,31 +138,41 @@ def approve_action(
 ) -> str:
     """Record that a human approved an AI agent action.
 
-    Call this when a human explicitly approves a tool call.
-    The decision is persisted and used for future auto-learning.
+    IMPORTANT: You must include the challenge, challenge_nonce, and
+    challenge_issued_at values from the original check_permission verdict.
+    These prove a human saw the verdict before approving.
 
     Args:
         tool: Tool name that was approved
         action: Action that was approved
         scope: Resource scope that was approved
         decided_by: Who approved it (user identifier)
+        challenge: Challenge token from the original check_permission verdict
+        challenge_nonce: Nonce from the original check_permission verdict
+        challenge_issued_at: Timestamp from the original check_permission verdict
         task_id: Optional task ID to also create a task-scoped grant
         session_id: Optional session ID (caches approval for this session)
         reasoning: Why the human approved (optional, helps with auditing)
         organization_id: Tenant identifier
     """
-    _engine.record_human_decision(
-        tool=tool,
-        action=action,
-        scope=scope,
-        decision=PermissionDecision.ALLOW,
-        decided_by=decided_by,
-        task_id=task_id,
-        session_id=session_id,
-        organization_id=organization_id,
-        runtime_id="mcp",
-        reasoning=reasoning,
-    )
+    try:
+        _engine.record_human_decision(
+            tool=tool,
+            action=action,
+            scope=scope,
+            decision=PermissionDecision.ALLOW,
+            decided_by=decided_by,
+            challenge=challenge,
+            challenge_nonce=challenge_nonce,
+            challenge_issued_at=challenge_issued_at,
+            task_id=task_id,
+            session_id=session_id,
+            organization_id=organization_id,
+            runtime_id="mcp",
+            reasoning=reasoning,
+        )
+    except ValueError as e:
+        raise ToolError(str(e))
 
     # Also grant task-scoped permission if task_id provided
     if task_id:
@@ -175,6 +198,9 @@ def deny_action(
     action: str,
     scope: str,
     decided_by: str,
+    challenge: str = "",
+    challenge_nonce: str = "",
+    challenge_issued_at: float = 0.0,
     task_id: str = "",
     session_id: str = "",
     reasoning: str = "",
@@ -182,31 +208,41 @@ def deny_action(
 ) -> str:
     """Record that a human denied an AI agent action.
 
-    Call this when a human explicitly rejects a tool call.
-    The denial is persisted and used for future auto-learning.
+    IMPORTANT: You must include the challenge, challenge_nonce, and
+    challenge_issued_at values from the original check_permission verdict.
+    These prove a human saw the verdict before denying.
 
     Args:
         tool: Tool name that was denied
         action: Action that was denied
         scope: Resource scope that was denied
         decided_by: Who denied it (user identifier)
+        challenge: Challenge token from the original check_permission verdict
+        challenge_nonce: Nonce from the original check_permission verdict
+        challenge_issued_at: Timestamp from the original check_permission verdict
         task_id: Optional task ID
         session_id: Optional session ID (caches denial for this session)
         reasoning: Why the human denied (optional, helps with auditing)
         organization_id: Tenant identifier
     """
-    _engine.record_human_decision(
-        tool=tool,
-        action=action,
-        scope=scope,
-        decision=PermissionDecision.DENY,
-        decided_by=decided_by,
-        task_id=task_id,
-        session_id=session_id,
-        organization_id=organization_id,
-        runtime_id="mcp",
-        reasoning=reasoning,
-    )
+    try:
+        _engine.record_human_decision(
+            tool=tool,
+            action=action,
+            scope=scope,
+            decision=PermissionDecision.DENY,
+            decided_by=decided_by,
+            challenge=challenge,
+            challenge_nonce=challenge_nonce,
+            challenge_issued_at=challenge_issued_at,
+            task_id=task_id,
+            session_id=session_id,
+            organization_id=organization_id,
+            runtime_id="mcp",
+            reasoning=reasoning,
+        )
+    except ValueError as e:
+        raise ToolError(str(e))
 
     # Report to cross-org intelligence (DP-protected)
     _intelligence.report_decision(tool, action, scope, decision_is_allow=False)
@@ -465,65 +501,250 @@ def get_config() -> str:
     }, indent=2)
 
 
-@mcp.tool()
-def update_config(
-    permission_learning_enabled: bool | None = None,
-    permission_learning_min_decisions: int | None = None,
-    auto_approve_threshold: float | None = None,
-    auto_deny_threshold: float | None = None,
-    intelligence_enabled: bool | None = None,
-    intelligence_epsilon: float | None = None,
-    intelligence_min_orgs: int | None = None,
-) -> str:
-    """Update Aperture configuration at runtime.
+# ─── Compliance Tools ────────────────────────────────────────────
 
-    Only provide the settings you want to change. Omitted settings keep
-    their current values. Changes are persisted to .aperture.env and
-    take effect immediately (no restart needed).
+
+@mcp.tool()
+def report_tool_execution(
+    tool: str,
+    action: str,
+    scope: str,
+    session_id: str = "",
+    organization_id: str = "default",
+) -> str:
+    """Report that an AI agent executed a tool action.
+
+    Call this AFTER the agent executes a tool to create a compliance record.
+    The compliance report compares these execution records against prior
+    permission checks to identify unchecked tool usage.
 
     Args:
-        permission_learning_enabled: Auto-learn from human decisions
-        permission_learning_min_decisions: Min decisions before auto-deciding
-        auto_approve_threshold: Approval rate (0.0-1.0) to auto-approve
-        auto_deny_threshold: Approval rate (0.0-1.0) to auto-deny
-        intelligence_enabled: Enable cross-org DP intelligence
-        intelligence_epsilon: DP noise level (higher = less private)
-        intelligence_min_orgs: Min orgs for global signal
+        tool: Tool that was executed
+        action: Action that was performed
+        scope: Resource scope affected
+        session_id: Session identifier (used to match against prior checks)
+        organization_id: Tenant identifier
+    """
+    _audit.record(
+        event_type="tool.executed",
+        summary=f"Executed: {tool}.{action} on {scope}",
+        organization_id=organization_id,
+        entity_type="tool_execution",
+        entity_id=f"{tool}.{action}.{scope}",
+        actor_type="runtime",
+        runtime_id="mcp",
+        details={
+            "tool": tool,
+            "action": action,
+            "scope": scope,
+            "session_id": session_id,
+        },
+    )
+
+    return json.dumps({"recorded": True, "tool": tool, "action": action, "scope": scope})
+
+
+@mcp.tool()
+def get_compliance_report(
+    session_id: str = "",
+    organization_id: str = "default",
+) -> str:
+    """Get a compliance report showing checked vs. unchecked tool executions.
+
+    Returns:
+    - Total executions reported
+    - Executions with prior permission check
+    - Executions WITHOUT prior permission check (compliance gaps)
+    - Compliance ratio
+
+    Args:
+        session_id: Filter to a specific session
+        organization_id: Tenant identifier
+    """
+    report = _compute_compliance(session_id, organization_id)
+    return json.dumps(report, indent=2)
+
+
+def _compute_compliance(session_id: str, organization_id: str) -> dict:
+    """Compare permission checks against tool executions for a session."""
+    checks = _audit.list_events(
+        organization_id=organization_id,
+        event_type="permission.check",
+        limit=10000,
+    )
+    executions = _audit.list_events(
+        organization_id=organization_id,
+        event_type="tool.executed",
+        limit=10000,
+    )
+
+    # Filter by session_id from details
+    if session_id:
+        checks = [e for e in checks if e.details and e.details.get("session_id") == session_id]
+        executions = [e for e in executions if e.details and e.details.get("session_id") == session_id]
+
+    # Build sets of (tool, action, scope) for each
+    checked_keys = set()
+    for e in checks:
+        if e.details and "tool" not in e.details:
+            # check_permission stores the full verdict in details; extract tool/action/scope
+            d = e.details
+            # The entity_id format is "tool.action.scope"
+            pass
+        if e.details:
+            t = e.details.get("tool", "")
+            a = e.details.get("action", "")
+            s = e.details.get("scope", "")
+            if t and a:
+                checked_keys.add((t, a, s))
+
+    # Also extract from entity_id for check events that store verdict directly
+    for e in checks:
+        if e.entity_id and e.entity_id.count(".") >= 2:
+            parts = e.entity_id.split(".", 2)
+            checked_keys.add((parts[0], parts[1], parts[2]))
+
+    executed_keys = set()
+    for e in executions:
+        if e.details:
+            t = e.details.get("tool", "")
+            a = e.details.get("action", "")
+            s = e.details.get("scope", "")
+            if t and a:
+                executed_keys.add((t, a, s))
+
+    unchecked = executed_keys - checked_keys
+    total = len(executed_keys)
+    checked = len(executed_keys & checked_keys)
+
+    return {
+        "total_executions": total,
+        "checked_executions": checked,
+        "unchecked_executions": len(unchecked),
+        "compliance_ratio": round(checked / total, 3) if total > 0 else 1.0,
+        "unchecked_details": [
+            {"tool": t, "action": a, "scope": s} for t, a, s in sorted(unchecked)
+        ],
+    }
+
+
+# ─── Revocation Tools ───────────────────────────────────────────
+
+
+@mcp.tool()
+def revoke_permission_pattern(
+    tool: str,
+    action: str,
+    scope: str,
+    revoked_by: str,
+    organization_id: str = "default",
+) -> str:
+    """Revoke auto-approval for a permission pattern.
+
+    Marks all matching learned decisions as revoked (soft delete).
+    After revocation, the pattern will no longer auto-approve and
+    will require fresh human decisions.
+
+    The revocation is logged in the audit trail. Revoked decisions
+    are preserved for auditing but excluded from learning.
+
+    Args:
+        tool: Tool name to revoke (exact match)
+        action: Action name to revoke (exact match)
+        scope: Scope pattern to revoke (exact or glob)
+        revoked_by: Who is revoking (user identifier)
+        organization_id: Tenant identifier
+    """
+    count = _engine.revoke_pattern(
+        tool=tool,
+        action=action,
+        scope=scope,
+        revoked_by=revoked_by,
+        organization_id=organization_id,
+    )
+
+    _audit.record(
+        event_type="permission.revoked",
+        summary=f"Revoked {count} decisions for {tool}.{action} on {scope}",
+        organization_id=organization_id,
+        entity_type="permission",
+        entity_id=f"{tool}.{action}.{scope}",
+        actor_type="human",
+        actor_id=revoked_by,
+        runtime_id="mcp",
+        details={
+            "tool": tool,
+            "action": action,
+            "scope": scope,
+            "revoked_by": revoked_by,
+            "revoked_count": count,
+        },
+    )
+
+    return json.dumps({
+        "revoked": True,
+        "count": count,
+        "tool": tool,
+        "action": action,
+        "scope": scope,
+    })
+
+
+@mcp.tool()
+def list_auto_approved_patterns(
+    organization_id: str = "default",
+    min_decisions: int = 0,
+) -> str:
+    """List all permission patterns currently being auto-approved.
+
+    Shows which (tool, action, scope) patterns have enough consistent
+    human approvals to trigger automatic approval. Use this to identify
+    patterns you may want to revoke.
+
+    Args:
+        organization_id: Tenant identifier
+        min_decisions: Minimum decisions to include (0 = use configured threshold)
     """
     import aperture.config
 
-    updates = {}
-    if permission_learning_enabled is not None:
-        updates["permission_learning_enabled"] = permission_learning_enabled
-    if permission_learning_min_decisions is not None:
-        updates["permission_learning_min_decisions"] = permission_learning_min_decisions
-    if auto_approve_threshold is not None:
-        updates["auto_approve_threshold"] = auto_approve_threshold
-    if auto_deny_threshold is not None:
-        updates["auto_deny_threshold"] = auto_deny_threshold
-    if intelligence_enabled is not None:
-        updates["intelligence_enabled"] = intelligence_enabled
-    if intelligence_epsilon is not None:
-        updates["intelligence_epsilon"] = intelligence_epsilon
-    if intelligence_min_orgs is not None:
-        updates["intelligence_min_orgs"] = intelligence_min_orgs
+    settings = aperture.config.settings
+    if not settings.permission_learning_enabled:
+        return json.dumps({"patterns": [], "message": "Learning is disabled"})
 
-    if not updates:
-        return json.dumps({
-            "updated": False,
-            "message": "No settings provided to update",
-            "settings": aperture.config.get_tunable_config(),
-        })
+    threshold_min = min_decisions or settings.permission_learning_min_decisions
+    threshold_rate = settings.auto_approve_threshold
 
-    try:
-        aperture.config.update_settings(updates)
-    except ValueError as e:
-        raise ToolError(str(e))
+    patterns = _learner.detect_patterns(
+        organization_id=organization_id,
+        min_decisions=threshold_min,
+    )
+
+    auto_approved = [
+        p for p in patterns
+        if p.approval_rate >= threshold_rate
+    ]
+
+    if not auto_approved:
+        return json.dumps({"patterns": [], "message": "No patterns currently auto-approved"})
 
     return json.dumps({
-        "updated": True,
-        "changed": list(updates.keys()),
-        "settings": aperture.config.get_tunable_config(),
+        "patterns": [
+            {
+                "tool": p.tool,
+                "action": p.action,
+                "scope": p.scope,
+                "approval_rate": round(p.approval_rate, 3),
+                "total_decisions": p.total_decisions,
+                "unique_humans": p.unique_humans,
+                "confidence": round(p.confidence, 3),
+            }
+            for p in auto_approved
+        ],
+        "count": len(auto_approved),
+        "threshold": {
+            "min_decisions": threshold_min,
+            "approval_rate": threshold_rate,
+        },
     })
 
 

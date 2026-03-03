@@ -9,7 +9,6 @@ External runtimes call these endpoints to:
 6. Get command explanations
 """
 
-from typing import Optional
 
 from fastapi import APIRouter
 from pydantic import BaseModel
@@ -35,6 +34,7 @@ class CheckRequest(BaseModel):
     session_id: str = ""
     organization_id: str = "default"
     runtime_id: str = ""
+    content_hash: str = ""  # optional content awareness
 
 
 class RecordDecisionRequest(BaseModel):
@@ -43,6 +43,9 @@ class RecordDecisionRequest(BaseModel):
     scope: str
     decision: PermissionDecision
     decided_by: str  # user identifier
+    challenge: str = ""
+    challenge_nonce: str = ""
+    challenge_issued_at: float = 0.0
     task_id: str = ""
     session_id: str = ""
     organization_id: str = "default"
@@ -58,7 +61,7 @@ class GrantRequest(BaseModel):
     decision: PermissionDecision
     granted_by: str
     organization_id: str = "default"
-    ttl_seconds: Optional[int] = None
+    ttl_seconds: int | None = None
 
 
 # --- Endpoints ---
@@ -87,6 +90,7 @@ def check_permission(req: CheckRequest, enrich: bool = False):
         organization_id=req.organization_id,
         runtime_id=req.runtime_id,
         enrich=enrich,
+        content_hash=req.content_hash,
     )
     return verdict.to_dict()
 
@@ -104,6 +108,9 @@ def record_decision(req: RecordDecisionRequest):
         scope=req.scope,
         decision=req.decision,
         decided_by=req.decided_by,
+        challenge=req.challenge,
+        challenge_nonce=req.challenge_nonce,
+        challenge_issued_at=req.challenge_issued_at,
         task_id=req.task_id,
         session_id=req.session_id,
         organization_id=req.organization_id,

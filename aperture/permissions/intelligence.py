@@ -15,7 +15,7 @@ import logging
 import math
 import random
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlmodel import Session, select
 
@@ -92,7 +92,7 @@ class IntelligenceEngine:
             stat.confidence_low = max(0.0, stat.estimated_allow_rate - ci_half)
             stat.confidence_high = min(1.0, stat.estimated_allow_rate + ci_half)
 
-            stat.last_updated = datetime.now(timezone.utc).replace(tzinfo=None)
+            stat.last_updated = datetime.now(UTC).replace(tzinfo=None)
 
             session.add(stat)
             session.commit()

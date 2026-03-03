@@ -9,7 +9,6 @@ This enables similarity matching by intent (what's affected) not mechanism (whic
 import re
 import shlex
 
-
 # Shell commands where the last positional arg is the target
 _TARGET_LAST_CMDS = frozenset({
     "rm", "cat", "head", "tail", "less", "more", "chmod", "chown",

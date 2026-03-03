@@ -5,6 +5,21 @@ from fastapi.testclient import TestClient
 from aperture.api import create_app
 
 
+def _get_challenge(client: TestClient, tool: str, action: str, scope: str) -> dict:
+    """Get a challenge token by calling check endpoint."""
+    resp = client.post("/permissions/check", json={
+        "tool": tool, "action": action, "scope": scope, "permissions": [],
+    })
+    assert resp.status_code == 200, f"Check failed: {resp.text}"
+    data = resp.json()
+    assert "challenge" in data, f"No challenge in response: {data}"
+    return {
+        "challenge": data["challenge"],
+        "challenge_nonce": data["challenge_nonce"],
+        "challenge_issued_at": data["challenge_issued_at"],
+    }
+
+
 class TestHealthEndpoint:
 
     def test_health(self):
@@ -65,17 +80,21 @@ class TestPermissionAPI:
         assert data["explanation"]
 
     def test_record_and_patterns(self):
+        import aperture.config
+        aperture.config.settings.permission_learning_min_decisions = 15  # prevent auto-learn during recording
         app = create_app()
         client = TestClient(app)
 
         # Record 10 decisions
         for i in range(10):
+            ch = _get_challenge(client, "api", "get", "users/*")
             client.post("/permissions/record", json={
                 "tool": "api",
                 "action": "get",
                 "scope": "users/*",
                 "decision": "allow",
                 "decided_by": f"user-{i % 3}",
+                **ch,
             })
 
         # Check patterns
@@ -230,17 +249,21 @@ class TestPermissionAPI:
 
     def test_similar_finds_related_patterns(self):
         """After recording decisions, /similar finds structurally similar patterns."""
+        import aperture.config
+        aperture.config.settings.permission_learning_min_decisions = 15
         app = create_app()
         client = TestClient(app)
 
         # Record decisions for shell.execute on "rm -rf ./build/"
         for i in range(5):
+            ch = _get_challenge(client, "shell", "execute", "rm -rf ./build/")
             client.post("/permissions/record", json={
                 "tool": "shell",
                 "action": "execute",
                 "scope": "rm -rf ./build/",
                 "decision": "allow",
                 "decided_by": f"user-{i}",
+                **ch,
             })
 
         # Query for similar pattern: shell.execute on "rm -rf ./dist/"
@@ -263,17 +286,21 @@ class TestPermissionAPI:
 
     def test_similar_response_shape(self):
         """Each pattern in the response has the correct fields and types."""
+        import aperture.config
+        aperture.config.settings.permission_learning_min_decisions = 15
         app = create_app()
         client = TestClient(app)
 
         # Seed some decisions
         for i in range(3):
+            ch = _get_challenge(client, "filesystem", "read", "src/main.py")
             client.post("/permissions/record", json={
                 "tool": "filesystem",
                 "action": "read",
                 "scope": "src/main.py",
                 "decision": "allow" if i < 2 else "deny",
                 "decided_by": f"reviewer-{i}",
+                **ch,
             })
 
         # Query a similar filesystem read

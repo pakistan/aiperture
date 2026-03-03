@@ -22,8 +22,7 @@ import fnmatch
 import logging
 import uuid
 from collections import OrderedDict
-from datetime import datetime, timedelta, timezone
-from typing import Optional
+from datetime import UTC, datetime, timedelta
 
 _MAX_SESSION_CACHE_SIZE = 10_000
 
@@ -46,7 +45,8 @@ class PermissionEngine:
     """Deterministic permission checker for AI agent actions."""
 
     def __init__(self, max_cache_size: int = _MAX_SESSION_CACHE_SIZE):
-        self._session_cache: OrderedDict[tuple[str, str, str, str], PermissionDecision] = OrderedDict()
+        # Cache key: (tool, action, scope, session_id, content_hash)
+        self._session_cache: OrderedDict[tuple[str, str, str, str, str], PermissionDecision] = OrderedDict()
         self._max_cache_size = max_cache_size
 
     def check(
@@ -61,6 +61,7 @@ class PermissionEngine:
         organization_id: str = "default",
         runtime_id: str = "",
         enrich: bool = False,
+        content_hash: str = "",
     ) -> PermissionVerdict:
         """Check if an action is permitted. Returns enriched verdict.
 
@@ -74,17 +75,19 @@ class PermissionEngine:
             organization_id: Tenant ID
             runtime_id: Which external runtime is asking
             enrich: If True, compute risk, explanation, crowd signal, etc.
+            content_hash: Optional content hash — different hashes = different checks
 
         Returns:
             PermissionVerdict with decision and optional enrichment.
         """
-        # 0. Session memory
-        cache_key = (tool, action, scope, session_id)
+        # 0. Session memory (content_hash is part of the cache key)
+        cache_key = (tool, action, scope, session_id, content_hash)
         if session_id and cache_key in self._session_cache:
             decision = self._session_cache[cache_key]
             verdict = self._build_verdict(
                 decision, "session_memory", tool, action, scope,
                 organization_id=organization_id, enrich=enrich,
+                content_hash=content_hash, session_id=session_id,
             )
             self._log(
                 tool, action, scope, decision, "session_memory",
@@ -144,12 +147,12 @@ class PermissionEngine:
         decision: PermissionDecision,
         granted_by: str,
         organization_id: str = "default",
-        ttl_seconds: Optional[int] = None,
+        ttl_seconds: int | None = None,
     ) -> TaskPermission:
         """Grant a task-scoped permission (ReBAC)."""
         expires_at = None
         if ttl_seconds:
-            expires_at = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(seconds=ttl_seconds)
+            expires_at = datetime.now(UTC).replace(tzinfo=None) + timedelta(seconds=ttl_seconds)
 
         grant = TaskPermission(
             permission_id=uuid.uuid4().hex[:16],
@@ -178,6 +181,9 @@ class PermissionEngine:
         decision: PermissionDecision,
         decided_by: str,
         *,
+        challenge: str = "",
+        challenge_nonce: str = "",
+        challenge_issued_at: float = 0.0,
         task_id: str = "",
         session_id: str = "",
         organization_id: str = "default",
@@ -186,12 +192,34 @@ class PermissionEngine:
     ) -> PermissionLog:
         """Record a human's permission decision for learning.
 
+        Requires a valid HMAC challenge token from the original check_permission
+        verdict. This prevents agents from fabricating approvals without human
+        involvement.
+
         Also caches in session memory so the same check in the same session
         returns the same decision without re-asking.
         """
+        from aperture.permissions.challenge import verify_challenge
+
+        if not verify_challenge(
+            token=challenge,
+            nonce=challenge_nonce,
+            issued_at=challenge_issued_at,
+            tool=tool,
+            action=action,
+            scope=scope,
+        ):
+            logger.warning(
+                "Rejected human decision without valid challenge: %s.%s on %s by %s",
+                tool, action, scope, decided_by,
+            )
+            raise ValueError(
+                "Invalid or missing challenge token. "
+                "Human decisions must include the challenge from the original permission check."
+            )
         # Cache in session memory (LRU eviction at max size)
         if session_id:
-            cache_key = (tool, action, scope, session_id)
+            cache_key = (tool, action, scope, session_id, "")
             self._session_cache[cache_key] = decision
             self._session_cache.move_to_end(cache_key)
             while len(self._session_cache) > self._max_cache_size:
@@ -202,6 +230,53 @@ class PermissionEngine:
             task_id=task_id, session_id=session_id,
             organization_id=organization_id, runtime_id=runtime_id,
         )
+
+    def revoke_pattern(
+        self,
+        tool: str,
+        action: str,
+        scope: str,
+        revoked_by: str,
+        organization_id: str = "default",
+    ) -> int:
+        """Revoke all learned decisions matching (tool, action, scope).
+
+        Soft-deletes by setting revoked_at. Preserves audit trail.
+
+        Returns:
+            Number of decisions revoked.
+        """
+        now = datetime.now(UTC).replace(tzinfo=None)
+        count = 0
+
+        with Session(get_engine()) as session:
+            logs = session.exec(
+                select(PermissionLog).where(
+                    PermissionLog.organization_id == organization_id,
+                    PermissionLog.tool == tool,
+                    PermissionLog.action == action,
+                    PermissionLog.decided_by.startswith("human:"),  # type: ignore[union-attr]
+                    PermissionLog.revoked_at.is_(None),  # type: ignore[union-attr]
+                )
+            ).all()
+
+            for log in logs:
+                if fnmatch.fnmatch(log.scope, scope) or log.scope == scope:
+                    log.revoked_at = now
+                    session.add(log)
+                    count += 1
+
+            session.commit()
+
+        # Clear session cache entries for this pattern
+        to_remove = [
+            k for k in self._session_cache
+            if k[0] == tool and k[1] == action and (fnmatch.fnmatch(k[2], scope) or k[2] == scope)
+        ]
+        for k in to_remove:
+            del self._session_cache[k]
+
+        return count
 
     # --- Internal methods ---
 
@@ -215,19 +290,49 @@ class PermissionEngine:
         *,
         organization_id: str = "default",
         enrich: bool = False,
+        content_hash: str = "",
+        session_id: str = "",
     ) -> PermissionVerdict:
         """Build a PermissionVerdict, optionally enriched with signals."""
+        from aperture.permissions.challenge import create_challenge
         from aperture.permissions.risk import classify_risk
 
         # Risk is always computed (it's cheap — pure function)
         risk = classify_risk(tool, action, scope)
 
+        # Content change detection: check if same (tool, action, scope) was seen
+        # with a different content_hash in the same session
+        content_changed = False
+        if content_hash and session_id:
+            for cached_key in self._session_cache:
+                if (
+                    cached_key[0] == tool
+                    and cached_key[1] == action
+                    and cached_key[2] == scope
+                    and cached_key[3] == session_id
+                    and cached_key[4]
+                    and cached_key[4] != content_hash
+                ):
+                    content_changed = True
+                    break
+
+        # Generate HMAC challenge for non-ALLOW decisions
+        challenge_token = None
+        if decision != PermissionDecision.ALLOW:
+            challenge_token = create_challenge(tool, action, scope)
+
         if not enrich:
-            return PermissionVerdict(
+            verdict = PermissionVerdict(
                 decision=decision,
                 decided_by=decided_by,
                 risk=risk,
+                content_changed=content_changed,
             )
+            if challenge_token:
+                verdict.challenge = challenge_token.token
+                verdict.challenge_nonce = challenge_token.nonce
+                verdict.challenge_issued_at = challenge_token.issued_at
+            return verdict
 
         # Full enrichment
         from aperture.permissions.crowd import compute_auto_approve_distance, get_org_signal
@@ -271,7 +376,7 @@ class PermissionEngine:
             decision, org_signal, similar, risk,
         )
 
-        return PermissionVerdict(
+        verdict = PermissionVerdict(
             decision=decision,
             decided_by=decided_by,
             risk=risk,
@@ -282,7 +387,13 @@ class PermissionEngine:
             auto_approve_distance=auto_distance,
             recommendation=rec_text,
             recommendation_code=rec_code,
+            content_changed=content_changed,
         )
+        if challenge_token:
+            verdict.challenge = challenge_token.token
+            verdict.challenge_nonce = challenge_token.nonce
+            verdict.challenge_issued_at = challenge_token.issued_at
+        return verdict
 
     def _compute_recommendation(
         self,
@@ -339,7 +450,7 @@ class PermissionEngine:
         permissions: list[Permission],
     ) -> PermissionDecision:
         """Match against static rules. Most specific match wins."""
-        best_match: Optional[Permission] = None
+        best_match: Permission | None = None
         best_specificity = -1
 
         for perm in permissions:
@@ -367,9 +478,9 @@ class PermissionEngine:
         scope: str,
         task_id: str,
         organization_id: str,
-    ) -> Optional[PermissionDecision]:
+    ) -> PermissionDecision | None:
         """Check task-scoped ReBAC grants."""
-        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        now = datetime.now(UTC).replace(tzinfo=None)
         with Session(get_engine()) as session:
             grants = session.exec(
                 select(TaskPermission).where(
@@ -398,7 +509,7 @@ class PermissionEngine:
         action: str,
         scope: str,
         organization_id: str,
-    ) -> Optional[PermissionDecision]:
+    ) -> PermissionDecision | None:
         """Check if we've learned enough to auto-decide.
 
         HIGH and CRITICAL risk actions are never auto-approved — they always
@@ -430,6 +541,7 @@ class PermissionEngine:
                     PermissionLog.tool == tool,
                     PermissionLog.action == action,
                     PermissionLog.decided_by.startswith("human:"),  # type: ignore[union-attr]
+                    PermissionLog.revoked_at.is_(None),  # type: ignore[union-attr]  # exclude revoked
                 ).order_by(PermissionLog.created_at.desc())  # type: ignore[union-attr]
             ).all()
 

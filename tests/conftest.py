@@ -1,11 +1,10 @@
 """Test fixtures — fresh SQLite database per test."""
 
-from pathlib import Path
 
 import pytest
 
 import aperture.config
-from aperture.db.engine import get_engine, init_db, reset_engine
+from aperture.db.engine import init_db, reset_engine
 
 
 @pytest.fixture(autouse=True)

@@ -38,6 +38,9 @@ class Settings(BaseSettings):
     intelligence_epsilon: float = 1.0  # local DP noise level (higher = less private)
     intelligence_min_orgs: int = 5  # minimum orgs before surfacing global signal
 
+    # Compliance
+    compliance_tracking_enabled: bool = True  # track checked vs unchecked tool executions
+
     # Artifacts
     artifact_storage_dir: str = ""
 

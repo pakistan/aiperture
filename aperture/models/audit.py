@@ -1,9 +1,8 @@
 """Audit event model — append-only log of everything that happens."""
 
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 
-from sqlmodel import Column, Field, JSON, SQLModel
+from sqlmodel import JSON, Column, Field, SQLModel
 
 
 class AuditEvent(SQLModel, table=True):
@@ -11,7 +10,7 @@ class AuditEvent(SQLModel, table=True):
 
     __tablename__ = "audit_events"
 
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: int | None = Field(default=None, primary_key=True)
     event_id: str = Field(index=True, unique=True)
     organization_id: str = Field(default="default", index=True)
     batch_id: str = Field(default="", index=True)
@@ -28,8 +27,8 @@ class AuditEvent(SQLModel, table=True):
     runtime_id: str = Field(default="", index=True)
 
     # State change
-    details: Optional[dict] = Field(default=None, sa_column=Column(JSON))
-    previous_state: Optional[dict] = Field(default=None, sa_column=Column(JSON))
-    new_state: Optional[dict] = Field(default=None, sa_column=Column(JSON))
+    details: dict | None = Field(default=None, sa_column=Column(JSON))
+    previous_state: dict | None = Field(default=None, sa_column=Column(JSON))
+    new_state: dict | None = Field(default=None, sa_column=Column(JSON))
 
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC).replace(tzinfo=None))

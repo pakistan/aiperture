@@ -2,7 +2,7 @@
 
 from aperture.models import RiskTier
 from aperture.permissions import classify_risk
-from aperture.permissions.risk import CRITICAL_PATTERNS, scope_breadth
+from aperture.permissions.risk import scope_breadth
 
 
 class TestCriticalOverride:

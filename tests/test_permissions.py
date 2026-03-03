@@ -2,6 +2,17 @@
 
 from aperture.models import Permission, PermissionDecision, RiskTier
 from aperture.permissions import PermissionEngine, PermissionLearner
+from aperture.permissions.challenge import create_challenge
+
+
+def _make_challenge(tool: str, action: str, scope: str) -> dict:
+    """Helper: create valid challenge kwargs for record_human_decision."""
+    token = create_challenge(tool, action, scope)
+    return {
+        "challenge": token.token,
+        "challenge_nonce": token.nonce,
+        "challenge_issued_at": token.issued_at,
+    }
 
 
 class TestStaticPermissions:
@@ -98,6 +109,7 @@ class TestPermissionLearning:
                 decision=PermissionDecision.ALLOW,
                 decided_by=f"user-{i % 3}",
                 organization_id="default",
+                **_make_challenge("filesystem", "read", "docs/*"),
             )
 
         # Now check — should be auto-approved (no static rules needed)
@@ -117,6 +129,7 @@ class TestPermissionLearning:
                 scope="test.sh",
                 decision=PermissionDecision.ALLOW,
                 decided_by="user-1",
+                **_make_challenge("shell", "execute", "test.sh"),
             )
 
         # Falls through to static rules (empty = deny)
@@ -139,6 +152,7 @@ class TestPermissionLearning:
                 decision=PermissionDecision.ALLOW,
                 decided_by=f"user-{i % 3}",
                 organization_id="default",
+                **_make_challenge("shell", "execute", "rm -rf ./build/"),
             )
 
         # Despite 20 approvals at 100% rate, this should NOT be auto-approved
@@ -161,6 +175,7 @@ class TestPermissionLearning:
                 scope="users/*",
                 decision=PermissionDecision.ALLOW if i < 19 else PermissionDecision.DENY,
                 decided_by=f"user-{i % 4}",
+                **_make_challenge("api", "post", "users/*"),
             )
 
         learner = PermissionLearner()
@@ -199,6 +214,7 @@ class TestVerdictEnrichment:
                 scope="src/*",
                 decision=PermissionDecision.ALLOW,
                 decided_by=f"user-{i}",
+                **_make_challenge("filesystem", "read", "src/*"),
             )
 
         verdict = engine.check("filesystem", "read", "src/main.py", [], enrich=True)
@@ -225,6 +241,7 @@ class TestVerdictEnrichment:
             decision=PermissionDecision.ALLOW,
             decided_by="user-1",
             session_id="session-abc",
+            **_make_challenge("shell", "execute", "test.sh"),
         )
 
         # Same check with same session_id → cached

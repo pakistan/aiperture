@@ -6,7 +6,7 @@ Also computes trends and auto-approve distance.
 
 import fnmatch
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlmodel import Session, select
 
@@ -28,7 +28,7 @@ def get_org_signal(
 
     Returns None if there is zero decision history for this pattern.
     """
-    cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=lookback_days)
+    cutoff = datetime.now(UTC).replace(tzinfo=None) - timedelta(days=lookback_days)
 
     with Session(get_engine()) as session:
         logs = session.exec(
@@ -38,6 +38,7 @@ def get_org_signal(
                 PermissionLog.action == action,
                 PermissionLog.decided_by.startswith("human:"),  # type: ignore[union-attr]
                 PermissionLog.created_at >= cutoff,  # type: ignore[operator]
+                PermissionLog.revoked_at.is_(None),  # type: ignore[union-attr]  # exclude revoked
             )
         ).all()
 

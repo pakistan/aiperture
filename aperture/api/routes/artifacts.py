@@ -7,7 +7,6 @@ External runtimes call these endpoints to:
 4. Get cost summaries across runtimes/models
 """
 
-from typing import Optional
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -29,9 +28,9 @@ class StoreRequest(BaseModel):
     task_id: str = ""
     runtime_id: str = ""
     tool_name: str = ""
-    tool_args: Optional[dict] = None
+    tool_args: dict | None = None
     summary: str = ""
-    extra: Optional[dict] = None
+    extra: dict | None = None
     tokens_input: int = 0
     tokens_output: int = 0
     cost_usd: float = 0.0
@@ -100,8 +99,8 @@ def store_artifact(req: StoreRequest):
 @router.get("/costs/summary")
 def cost_summary(
     organization_id: str = "default",
-    task_id: Optional[str] = None,
-    runtime_id: Optional[str] = None,
+    task_id: str | None = None,
+    runtime_id: str | None = None,
 ):
     """Get cost summary across artifacts.
 

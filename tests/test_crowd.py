@@ -1,7 +1,22 @@
 """Tests for the crowd signal / org stats aggregator."""
 
 from aperture.models import OrgSignal, PermissionDecision
-from aperture.permissions import PermissionEngine, compute_auto_approve_distance, compute_trend, get_org_signal
+from aperture.permissions import (
+    PermissionEngine,
+    compute_auto_approve_distance,
+    get_org_signal,
+)
+from aperture.permissions.challenge import create_challenge
+
+
+def _make_challenge(tool: str, action: str, scope: str) -> dict:
+    """Helper: create valid challenge kwargs for record_human_decision."""
+    token = create_challenge(tool, action, scope)
+    return {
+        "challenge": token.token,
+        "challenge_nonce": token.nonce,
+        "challenge_issued_at": token.issued_at,
+    }
 
 
 class TestOrgSignal:
@@ -21,6 +36,7 @@ class TestOrgSignal:
                 decision=PermissionDecision.ALLOW,
                 decided_by=f"user-{i}",
                 organization_id="crowd-test-org",
+                **_make_challenge("filesystem", "read", "docs/*"),
             )
 
         signal = get_org_signal("filesystem", "read", "docs/*", organization_id="crowd-test-org")
@@ -38,6 +54,7 @@ class TestOrgSignal:
                 decision=PermissionDecision.ALLOW,
                 decided_by=f"user-{i}",
                 organization_id="crowd-mix-org",
+                **_make_challenge("api", "post", "users/*"),
             )
         for i in range(2):
             engine.record_human_decision(
@@ -45,6 +62,7 @@ class TestOrgSignal:
                 decision=PermissionDecision.DENY,
                 decided_by=f"user-{i}",
                 organization_id="crowd-mix-org",
+                **_make_challenge("api", "post", "users/*"),
             )
 
         signal = get_org_signal("api", "post", "users/*", organization_id="crowd-mix-org")
@@ -67,6 +85,7 @@ class TestTrend:
                 decision=PermissionDecision.ALLOW,
                 decided_by=f"user-{i}",
                 organization_id="trend-org",
+                **_make_challenge("shell", "execute", "trend-test-cmd"),
             )
         signal = get_org_signal("shell", "execute", "trend-test-cmd", organization_id="trend-org")
         # With only 2 decisions, trend should be insufficient_data or new

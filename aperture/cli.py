@@ -13,6 +13,8 @@ def main():
         print("  serve        Run HTTP API server")  # noqa: T201
         print("  init-db      Initialize the database")  # noqa: T201
         print("  configure    Interactive setup wizard")  # noqa: T201
+        print("  bootstrap    Seed permission decisions from a preset")  # noqa: T201
+        print("  revoke       Revoke auto-approval for a permission pattern")  # noqa: T201
         sys.exit(0)
 
     cmd = args[0]
@@ -23,6 +25,7 @@ def main():
 
     elif cmd == "serve":
         import uvicorn
+
         import aperture.config
         from aperture.api.app import create_app
 
@@ -38,9 +41,67 @@ def main():
     elif cmd == "configure":
         _configure()
 
+    elif cmd == "bootstrap":
+        _bootstrap(args[1:])
+
+    elif cmd == "revoke":
+        _revoke(args[1:])
+
     else:
         print(f"Unknown command: {cmd}")  # noqa: T201
         sys.exit(1)
+
+
+def _bootstrap(args: list[str]):
+    """Apply a bootstrap preset to seed permission decisions."""
+    from aperture.db import init_db
+    from aperture.permissions.presets import apply_preset, get_preset_names
+
+    init_db()
+
+    if not args or args[0] in ("--help", "-h"):
+        names = get_preset_names()
+        print("Usage: aperture bootstrap <preset_name>")  # noqa: T201
+        print(f"\nAvailable presets: {', '.join(names)}")  # noqa: T201
+        print("\n  developer  — filesystem reads, git, test runners, linters")  # noqa: T201
+        print("  readonly   — filesystem reads and safe shell commands only")  # noqa: T201
+        print("  minimal    — nothing pre-approved (fresh start)")  # noqa: T201
+        return
+
+    preset_name = args[0]
+    org_id = "default"
+    if len(args) > 1 and args[1].startswith("--org="):
+        org_id = args[1].split("=", 1)[1]
+
+    try:
+        total = apply_preset(preset_name, organization_id=org_id)
+        print(f"Applied '{preset_name}' preset: {total} decisions seeded.")  # noqa: T201
+        print("These patterns will now auto-approve immediately.")  # noqa: T201
+    except KeyError as e:
+        print(f"Error: {e}")  # noqa: T201
+        sys.exit(1)
+
+
+def _revoke(args: list[str]):
+    """Revoke auto-approval for a permission pattern."""
+    from aperture.db import init_db
+    from aperture.permissions.engine import PermissionEngine
+
+    if len(args) < 3 or args[0] in ("--help", "-h"):
+        print("Usage: aperture revoke <tool> <action> <scope> [--org=ORG_ID]")  # noqa: T201
+        print("\nExample: aperture revoke shell execute 'rm -rf*'")  # noqa: T201
+        return
+
+    init_db()
+    tool, action, scope = args[0], args[1], args[2]
+    org_id = "default"
+    for a in args[3:]:
+        if a.startswith("--org="):
+            org_id = a.split("=", 1)[1]
+
+    engine = PermissionEngine()
+    count = engine.revoke_pattern(tool, action, scope, revoked_by="cli", organization_id=org_id)
+    print(f"Revoked {count} decision(s) for {tool}.{action} on {scope}")  # noqa: T201
 
 
 def _configure(input_fn=None, env_file_path=None):
