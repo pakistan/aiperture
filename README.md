@@ -48,13 +48,15 @@ Aperture fixes this. It sits between your agent runtime and the outside world, l
      └─────────────┘
 ```
 
-**No LLM calls.** Every decision is deterministic — glob matching, statistics, and pattern lookup. Aperture never phones home, never calls an API, and adds zero latency from model inference.
+**No LLM calls.** Every decision is deterministic — glob matching, frequency counting, and pattern lookup. Aperture never phones home, never calls an API, and adds zero latency from model inference.
+
+**Runtime agnostic.** Aperture integrates via MCP (for Claude Code, OpenClaw), REST API (for any HTTP-capable runtime), or as a Python library (direct import). MCP is one integration path, not a dependency.
 
 ## What you experience
 
-**Day 1** — Aperture asks you about everything, just like today. But it's recording your decisions.
+**Day 1** — Run `aperture bootstrap developer` and 75 common safe patterns are auto-approved from the start. You only get asked about things not in the preset. Every decision you make is recorded.
 
-**Day 3** — You've approved `npm test`, `git status`, and `cat README.md` a dozen times each. Aperture stops asking about those. You still get prompted for `rm`, `curl`, and anything touching production.
+**Day 3** — Aperture has learned your project-specific patterns on top of the bootstrap. Custom build scripts, your test commands, project-specific file paths — all auto-approved. You still get prompted for `rm`, `curl`, and anything touching production.
 
 **Day 7** — The only popups you see are for genuinely new or risky actions. Everything routine is auto-approved. Everything dangerous is auto-denied. Your agent moves faster and you have a full audit trail of every decision.
 
@@ -96,7 +98,19 @@ aperture init-db
 
 This creates `aperture.db` in your current directory (SQLite). That's where all permission decisions, learned patterns, and audit logs are stored.
 
-### 3. Connect your agent runtime
+### 3. Bootstrap safe patterns (recommended)
+
+Skip the cold-start problem where every action is denied:
+
+```bash
+aperture bootstrap developer    # 75 pre-approved patterns (git, file reads, test runners, linters)
+```
+
+This seeds the learning engine with synthetic decisions for common safe actions — `git status`, `npm test`, reading `.py`/`.ts`/`.json` files, etc. Your agent can do routine work immediately without asking you 75 times first.
+
+Other presets: `readonly` (48 patterns — reads only) or `minimal` (clean slate, learn everything from scratch).
+
+### 4. Connect your agent runtime
 
 Pick whichever runtime you use:
 
@@ -192,11 +206,13 @@ verdict = engine.check("shell", "execute", "npm test", rules=[])
 print(verdict.decision)  # PermissionDecision.ALLOW
 ```
 
-### 4. What to expect
+### 5. What to expect
 
 Once connected, here's what your first week looks like:
 
-**First session** — Every action your agent tries gets checked. Since Aperture has no history yet, most things are denied. You'll approve the safe ones (reading files, running tests, git commands). This is normal — Aperture is building its model of your preferences.
+**First session (with bootstrap)** — Common safe actions are auto-approved immediately. You'll only be prompted for actions outside the preset — writes, installs, network calls, etc. Approve the safe ones; Aperture records your decisions.
+
+**First session (without bootstrap)** — Every action gets checked. You'll approve the safe ones (reading files, running tests, git commands). This is normal — Aperture is building its model of your preferences.
 
 **After ~10 approvals per action** — Aperture starts auto-approving the patterns you've consistently allowed. `git status`? Auto-approved. `npm test`? Auto-approved. You stop seeing prompts for routine actions.
 
@@ -227,24 +243,61 @@ export APERTURE_PERMISSION_LEARNING_MIN_DECISIONS=5
 export APERTURE_AUTO_APPROVE_THRESHOLD=0.90
 ```
 
+## How learning works
+
+There's no ML here. No model, no embeddings, no training step. The learning engine is frequency counting with configurable thresholds:
+
+1. Every human decision is recorded as a row: `(tool, action, scope, decision, timestamp, decided_by)`
+2. When a new permission check comes in, the engine queries all prior human decisions for that `(tool, action, scope)` tuple
+3. It computes the **approval rate** = `allow_count / total_decisions`
+4. If `approval_rate >= 0.95` and `total_decisions >= 10` → **auto-approve**
+5. If `approval_rate <= 0.05` and `total_decisions >= 10` → **auto-deny**
+6. Otherwise → **ask the human again**
+
+Both thresholds are configurable (`APERTURE_AUTO_APPROVE_THRESHOLD`, `APERTURE_PERMISSION_LEARNING_MIN_DECISIONS`).
+
+Two things make this smarter than a flat lookup table:
+
+- **Scope normalization** — `git log --oneline -5` is normalized to `git log*`, so approving any `git log` variant counts toward the same pattern. File paths are normalized similarly: `src/components/Button.tsx` → `src/components/*.tsx`. This means approvals accumulate faster.
+- **Exponential decay** — Recent decisions are weighted more heavily (30-day half-life). If you approved something 6 months ago but started denying it last week, the recent denials dominate.
+
+**Safety rails:** Actions scored as HIGH or CRITICAL risk (e.g., `rm -rf`, `DROP TABLE`, `curl | sh`) are **never** auto-approved regardless of history. They always require explicit human approval.
+
+## Why not just use CLAUDE.md rules?
+
+If you use Claude Code, you can already write `CLAUDE.md` rules or use `/permissions` to allowlist specific commands. That works. Aperture is for when it stops working:
+
+| | CLAUDE.md / `/permissions` | Aperture |
+|---|---|---|
+| **Setup** | You write and maintain rules manually | Learns from your decisions automatically |
+| **Scope** | One agent runtime (Claude Code) | Any runtime — Claude Code, OpenAI Agents, LangChain, OpenClaw, custom |
+| **Granularity** | Command-level allowlists | Normalizes variants (`git log*`), tracks by content hash, scores risk |
+| **Audit** | No record of what was approved or when | Append-only log of every decision with timestamps and who decided |
+| **Team use** | Per-developer, not shared | Org-level crowd signals — surfaces what your team usually approves |
+| **Revocation** | Delete the rule | `aperture revoke` soft-deletes with audit trail, forces fresh decisions |
+| **Verification** | Trust that the agent respects the rules | HMAC challenge-response proves a human saw the verdict |
+| **Risk analysis** | None — a rule is a rule | Deep shell analysis (unwraps `bash -c`, pipe-to-exec, `find -exec`) |
+
+If you're a solo developer running Claude Code on personal projects, `CLAUDE.md` rules are probably fine. Aperture is built for teams, for multi-runtime setups, and for anyone who needs an audit trail.
+
 ## Features
 
 | Feature | What it does |
 |---------|-------------|
 | **Permission Engine** | RBAC rules + task-scoped grants (ReBAC) + auto-learning from human decisions |
 | **Risk Scoring** | OWASP-inspired `tool danger × action severity × scope breadth` with deep analysis of shell wrappers, pipe-to-exec, and scripting oneliners |
-| **Learning Engine** | Tracks your approval/denial history per (tool, action, scope). After 10+ consistent decisions, auto-decides |
+| **Learning Engine** | Frequency-based pattern detection: tracks approval/denial rates per (tool, action, scope) and auto-decides after 10+ consistent decisions |
 | **Crowd Wisdom** | Aggregates decisions across your org — surfaces what your team usually approves or denies |
 | **Artifact Store** | SHA-256 verified, immutable storage for every agent output |
 | **Audit Trail** | Append-only compliance log of every permission decision |
 | **Compliance Tracking** | Detects unchecked tool executions — tools that ran without a prior permission check |
 | **HMAC Challenge-Response** | Cryptographic proof that a human saw the verdict before approving — prevents agent self-approval |
-| **Bootstrap Presets** | Pre-seed safe patterns (`developer`, `readonly`, `minimal`) so you're not overwhelmed on day 1 |
+| **Bootstrap Presets** | Pre-seed safe patterns (`developer`, `readonly`, `minimal`) so Aperture is useful from the first session |
 | **Revocation** | Undo learned patterns instantly — `aperture revoke shell execute "rm*"` |
 | **Content Awareness** | Differentiates writes to the same file by content hash — a rewrite of `main.py` is flagged even if a prior write was approved |
 | **Scope Normalization** | Groups `git log`, `git log --oneline`, `git log -5` into `git log*` so approvals accumulate faster |
-| **MCP Server** | 14 tools for Claude Code via Model Context Protocol |
-| **REST API** | FastAPI server for any agent runtime |
+| **REST API** | FastAPI server — works with any agent runtime over HTTP |
+| **MCP Server** | 14 tools for Claude Code and other MCP-compatible runtimes |
 | **CLI** | `aperture serve`, `aperture init-db`, `aperture configure`, `aperture bootstrap`, `aperture revoke` |
 
 ## How decisions are made
