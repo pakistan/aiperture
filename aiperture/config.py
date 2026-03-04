@@ -52,6 +52,9 @@ class Settings(BaseSettings):
     # Artifacts
     artifact_storage_dir: str = ""
 
+    # Hooks
+    hook_auto_allowed_tools: str = "Read,Grep,Glob,WebSearch,WebFetch"  # Claude Code tools to skip in PostToolUse
+
     # Logging
     log_level: str = "DEBUG"  # DEBUG, INFO, WARNING, ERROR
     log_file: str = "~/.aiperture/aiperture.log"  # Path to log file (RotatingFileHandler, 5 MB, 3 backups)
@@ -78,6 +81,7 @@ class Settings(BaseSettings):
         "rate_limit_per_minute",
         "session_risk_budget",
         "default_decision",
+        "hook_auto_allowed_tools",
         "log_level",
     })
 
@@ -96,9 +100,15 @@ class Settings(BaseSettings):
         "rate_limit_per_minute": "Max permission checks per session per minute (0 = unlimited)",
         "default_decision": "Fallback decision when no rule or learned pattern matches: 'ask' or 'deny'",
         "session_risk_budget": "Cumulative risk budget per session before escalating to ASK",
+        "hook_auto_allowed_tools": "Comma-separated Claude Code tool names that are auto-allowed (skip recording in PostToolUse hooks)",
         "log_level": "Logging verbosity: DEBUG (all decisions), INFO (deny+ask), WARNING (deny only), ERROR",
     }
 
+
+    @property
+    def hook_auto_allowed_tools_set(self) -> set[str]:
+        """Return hook_auto_allowed_tools as a set of tool names."""
+        return {t.strip() for t in self.hook_auto_allowed_tools.split(",") if t.strip()}
 
     @property
     def sensitive_patterns_list(self) -> list[str]:
@@ -151,6 +161,7 @@ def update_settings(
         "rate_limit_per_minute": int,
         "default_decision": str,
         "session_risk_budget": float,
+        "hook_auto_allowed_tools": str,
         "log_level": str,
     }
     coerced: dict[str, Any] = {}

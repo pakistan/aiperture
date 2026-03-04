@@ -225,6 +225,7 @@ Run `aiperture configure` for an interactive setup wizard, or use `PATCH /config
 | `AIPERTURE_RAPID_APPROVAL_MIN_COUNT` | `5` | Yes | Min approvals within window to flag as rubber-stamping |
 | `AIPERTURE_RATE_LIMIT_PER_MINUTE` | `200` | Yes | Max permission checks per session per minute (0 = unlimited) |
 | `AIPERTURE_SESSION_RISK_BUDGET` | `50.0` | Yes | Cumulative risk budget per session before escalating to ASK |
+| `AIPERTURE_HOOK_AUTO_ALLOWED_TOOLS` | `Read,Grep,Glob,WebSearch,WebFetch` | Yes | Comma-separated Claude Code tool names that are auto-allowed (skip recording in PostToolUse hooks) |
 | `AIPERTURE_LOG_LEVEL` | `DEBUG` | Yes | Logging verbosity: `DEBUG`, `INFO`, `WARNING`, `ERROR` |
 | `AIPERTURE_LOG_FILE` | `` | No | File path for log output (e.g. `~/.aiperture/aiperture.log`). RotatingFileHandler, 5 MB, 3 backups. Empty = no file logging |
 | `AIPERTURE_ARTIFACT_STORAGE_DIR` | `` | No | Artifact file storage directory |

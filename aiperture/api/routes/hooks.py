@@ -215,12 +215,17 @@ def handle_post_tool_use(
     Skips recording if the tool was auto-approved by AIperture (to avoid
     double-counting).
     """
+    from aiperture.config import settings
     from aiperture.metrics import HOOK_POST_TOOL_USE
 
     # Map Claude Code tool to AIperture triple
     mapping = map_tool(payload.tool_name, payload.tool_input)
     if mapping is None:
         return {"recorded": False, "reason": "skipped"}
+
+    # Skip tools that Claude Code auto-allows (no human decision involved)
+    if payload.tool_name in settings.hook_auto_allowed_tools_set:
+        return {"recorded": False, "reason": "hook_auto_allowed"}
 
     tool, action, scope = mapping
     HOOK_POST_TOOL_USE.inc()

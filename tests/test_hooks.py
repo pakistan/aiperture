@@ -169,11 +169,11 @@ class TestHookEndpoints:
         assert resp.json() == {}
 
     def test_post_tool_use_records_approval(self):
-        """PostToolUse should record an implicit approval."""
+        """PostToolUse should record an implicit approval for non-auto-allowed tools."""
         client = self._client()
         resp = client.post("/hooks/post-tool-use", json={
-            "tool_name": "Read",
-            "tool_input": {"file_path": "/src/main.py"},
+            "tool_name": "Bash",
+            "tool_input": {"command": "npm test"},
             "tool_use_id": "tu_3",
             "session_id": "test-session",
         })
@@ -266,29 +266,29 @@ class TestHookEndpoints:
         object.__setattr__(aiperture.config.settings, "permission_learning_min_decisions", 3)
 
         try:
-            # Seed learning
+            # Seed 3 approvals for a low-risk write action (not in auto-allowed list)
             for i in range(3):
                 engine.record_hook_decision(
-                    tool="filesystem", action="read", scope="src/*.py",
+                    tool="filesystem", action="write", scope="src/*.py",
                     decision=PermissionDecision.ALLOW,
                     session_id=f"learn-{i}",
                     organization_id="default",
                 )
 
-            tool_input = {"file_path": "src/main.py"}
+            tool_input = {"file_path": "src/main.py", "content": "hello"}
             session_id = "test-no-double-count"
 
             # PermissionRequest auto-approves
             resp1 = client.post("/hooks/permission-request", json={
-                "tool_name": "Read",
+                "tool_name": "Write",
                 "tool_input": tool_input,
                 "session_id": session_id,
             })
             assert resp1.json().get("hookSpecificOutput", {}).get("decision", {}).get("behavior") == "allow"
 
-            # PostToolUse should skip recording
+            # PostToolUse should skip recording (auto_approved, not hook_auto_allowed)
             resp2 = client.post("/hooks/post-tool-use", json={
-                "tool_name": "Read",
+                "tool_name": "Write",
                 "tool_input": tool_input,
                 "tool_use_id": "tu_auto",
                 "session_id": session_id,
@@ -312,6 +312,75 @@ class TestHookEndpoints:
             "session_id": "test-no-id",
         })
         assert resp.status_code == 200
+
+
+class TestHookAutoAllowedTools:
+
+    def _client(self):
+        app = create_app()
+        return TestClient(app)
+
+    def test_read_tool_skipped_by_default(self):
+        """PostToolUse with Read (default auto-allowed) returns hook_auto_allowed."""
+        client = self._client()
+        resp = client.post("/hooks/post-tool-use", json={
+            "tool_name": "Read",
+            "tool_input": {"file_path": "/src/main.py"},
+            "tool_use_id": "tu_read",
+            "session_id": "test-auto-allowed",
+        })
+        assert resp.status_code == 200
+        assert resp.json()["recorded"] is False
+        assert resp.json()["reason"] == "hook_auto_allowed"
+
+    def test_bash_tool_still_recorded(self):
+        """PostToolUse with Bash (not auto-allowed) still records normally."""
+        client = self._client()
+        resp = client.post("/hooks/post-tool-use", json={
+            "tool_name": "Bash",
+            "tool_input": {"command": "echo hello"},
+            "tool_use_id": "tu_bash",
+            "session_id": "test-auto-allowed",
+        })
+        assert resp.status_code == 200
+        assert resp.json()["recorded"] is True
+
+    def test_empty_allowlist_records_everything(self):
+        """With empty allowlist, all tools get recorded."""
+        import aiperture.config
+        original = aiperture.config.settings.hook_auto_allowed_tools
+        object.__setattr__(aiperture.config.settings, "hook_auto_allowed_tools", "")
+        try:
+            client = self._client()
+            resp = client.post("/hooks/post-tool-use", json={
+                "tool_name": "Read",
+                "tool_input": {"file_path": "/src/main.py"},
+                "tool_use_id": "tu_read2",
+                "session_id": "test-empty-allowlist",
+            })
+            assert resp.status_code == 200
+            assert resp.json()["recorded"] is True
+        finally:
+            object.__setattr__(aiperture.config.settings, "hook_auto_allowed_tools", original)
+
+    def test_custom_allowlist_skips_additional_tools(self):
+        """Custom allowlist with additional tools skips those too."""
+        import aiperture.config
+        original = aiperture.config.settings.hook_auto_allowed_tools
+        object.__setattr__(aiperture.config.settings, "hook_auto_allowed_tools", "Read,Bash")
+        try:
+            client = self._client()
+            resp = client.post("/hooks/post-tool-use", json={
+                "tool_name": "Bash",
+                "tool_input": {"command": "echo hello"},
+                "tool_use_id": "tu_bash2",
+                "session_id": "test-custom-allowlist",
+            })
+            assert resp.status_code == 200
+            assert resp.json()["recorded"] is False
+            assert resp.json()["reason"] == "hook_auto_allowed"
+        finally:
+            object.__setattr__(aiperture.config.settings, "hook_auto_allowed_tools", original)
 
 
 class TestRecordHookDecision:
