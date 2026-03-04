@@ -1,6 +1,6 @@
 [project]
 name = "aiperture"
-version = "0.12.0"
+version = "0.13.0"
 description = "The permission layer for AI agents. Controls what passes through."
 readme = "README.md"
 license = "Apache-2.0"
@@ -71,3 +71,6 @@ select = ["E", "F", "I", "W", "UP", "B", "SIM", "T20"]
 asyncio_mode = "auto"
 testpaths = ["tests"]
 addopts = "-n auto"
+markers = [
+    "e2e_claude: Real Claude Code smoke tests (requires claude CLI + ANTHROPIC_API_KEY)",
+]

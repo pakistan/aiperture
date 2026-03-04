@@ -1,0 +1,9 @@
+{
+  "session_id": "test-session-001",
+  "tool_name": "Read",
+  "tool_input": {
+    "file_path": "/Users/test/project/src/main.py"
+  },
+  "tool_response": "def hello():\n    print('hello')",
+  "tool_use_id": "toolu_01DEF456"
+}

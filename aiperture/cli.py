@@ -31,10 +31,18 @@ def main():
         _remove_claude(args[1:])
 
     elif cmd == "serve":
+        import logging
+
         import uvicorn
 
         import aiperture.config
         from aiperture.api.app import create_app
+
+        logging.basicConfig(
+            level=getattr(logging, aiperture.config.settings.log_level.upper(), logging.INFO),
+            format="%(asctime)s [aiperture] %(levelname)s %(message)s",
+        )
+        aiperture.config.setup_file_logging()
 
         app = create_app()
         settings = aiperture.config.settings

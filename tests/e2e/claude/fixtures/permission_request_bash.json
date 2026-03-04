@@ -1,0 +1,8 @@
+{
+  "session_id": "test-session-001",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "git log --oneline -5",
+    "description": "Show recent commits"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "session_id": "test-session-001",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "git log --oneline -5",
+    "description": "Show recent commits"
+  },
+  "tool_response": "abc123 Initial commit\ndef456 Add README",
+  "tool_use_id": "toolu_01ABC123"
+}
