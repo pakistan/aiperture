@@ -27,8 +27,10 @@ from aiperture.stores.artifact_store import ArtifactStore
 from aiperture.stores.audit_store import AuditStore
 
 # Logging to stderr only — stdout is reserved for MCP protocol
+import aiperture.config
+
 logging.basicConfig(
-    level=logging.INFO,
+    level=getattr(logging, aiperture.config.settings.log_level.upper(), logging.INFO),
     format="%(asctime)s [aiperture] %(levelname)s %(message)s",
     stream=sys.stderr,
 )

@@ -178,6 +178,7 @@ class PermissionEngine:
                     task_id=task_id, session_id=session_id,
                     organization_id=organization_id, runtime_id=runtime_id,
                 )
+                logger.warning("DENY %s/%s %s (rate_limit)", tool, action, scope)
                 return rate_verdict
 
         # 0. Session memory (organization_id + content_hash are part of the cache key)
@@ -196,6 +197,7 @@ class PermissionEngine:
                     task_id=task_id, session_id=session_id,
                     organization_id=organization_id, runtime_id=runtime_id,
                 )
+                logger.debug("%s %s/%s %s (session_memory)", cached.value.upper(), tool, action, scope)
                 return verdict
 
         if session_id:
@@ -212,6 +214,7 @@ class PermissionEngine:
                     task_id=task_id, session_id=session_id,
                     organization_id=organization_id, runtime_id=runtime_id,
                 )
+                self._log_decision(task_decision, tool, action, scope, "rebac")
                 return self._build_verdict(
                     task_decision, "rebac", tool, action, scope,
                     organization_id=organization_id, enrich=enrich,
@@ -237,6 +240,7 @@ class PermissionEngine:
                 task_id=task_id, session_id=session_id,
                 organization_id=organization_id, runtime_id=runtime_id,
             )
+            self._log_decision(learned, tool, action, scope, "auto_learned")
             return self._build_verdict(
                 learned, "auto_learned", tool, action, scope,
                 organization_id=organization_id, enrich=enrich,
@@ -259,6 +263,7 @@ class PermissionEngine:
             task_id=task_id, session_id=session_id,
             organization_id=organization_id, runtime_id=runtime_id,
         )
+        self._log_decision(decision, tool, action, scope, "static_rule")
         return self._build_verdict(
             decision, "static_rule", tool, action, scope,
             organization_id=organization_id, enrich=enrich,
@@ -409,6 +414,28 @@ class PermissionEngine:
         return count
 
     # --- Internal methods ---
+
+    @staticmethod
+    def _log_decision(
+        decision: PermissionDecision,
+        tool: str,
+        action: str,
+        scope: str,
+        decided_by: str,
+    ) -> None:
+        """Log permission decisions to stderr for developer visibility.
+
+        DENY → WARNING, ASK → INFO, ALLOW → DEBUG.
+        """
+        label = decision.value.upper()
+        msg = "%s %s/%s %s (%s)"
+        args = (label, tool, action, scope, decided_by)
+        if decision == PermissionDecision.DENY:
+            logger.warning(msg, *args)
+        elif decision == PermissionDecision.ASK:
+            logger.info(msg, *args)
+        else:
+            logger.debug(msg, *args)
 
     def _check_rapid_approval(
         self,

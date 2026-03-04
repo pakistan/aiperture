@@ -1,11 +1,17 @@
 """Aperture server entry point."""
 
+import logging
 import os
 
 import uvicorn
 
 import aiperture.config
 from aiperture.api import create_app
+
+logging.basicConfig(
+    level=getattr(logging, aiperture.config.settings.log_level.upper(), logging.INFO),
+    format="%(asctime)s [aiperture] %(levelname)s %(message)s",
+)
 
 app = create_app()
 

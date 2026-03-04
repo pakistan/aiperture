@@ -52,6 +52,9 @@ class Settings(BaseSettings):
     # Artifacts
     artifact_storage_dir: str = ""
 
+    # Logging
+    log_level: str = "DEBUG"  # DEBUG, INFO, WARNING, ERROR
+
     # API
     api_host: str = "0.0.0.0"
     api_port: int = 8100
@@ -73,6 +76,7 @@ class Settings(BaseSettings):
         "rapid_approval_min_count",
         "rate_limit_per_minute",
         "session_risk_budget",
+        "log_level",
     })
 
     TUNABLE_DESCRIPTIONS: ClassVar[dict[str, str]] = {
@@ -89,6 +93,7 @@ class Settings(BaseSettings):
         "rapid_approval_min_count": "Min approvals within window to flag as rubber-stamping",
         "rate_limit_per_minute": "Max permission checks per session per minute (0 = unlimited)",
         "session_risk_budget": "Cumulative risk budget per session before escalating to ASK",
+        "log_level": "Logging verbosity: DEBUG (all decisions), INFO (deny+ask), WARNING (deny only), ERROR",
     }
 
 
@@ -142,6 +147,7 @@ def update_settings(
         "rapid_approval_min_count": int,
         "rate_limit_per_minute": int,
         "session_risk_budget": float,
+        "log_level": str,
     }
     coerced: dict[str, Any] = {}
     for field, value in updates.items():
@@ -176,6 +182,12 @@ def update_settings(
     min_orgs = coerced.get("intelligence_min_orgs", settings.intelligence_min_orgs)
     if min_orgs < 1:
         raise ValueError(f"intelligence_min_orgs must be >= 1, got {min_orgs}")
+
+    log_level = coerced.get("log_level", settings.log_level).upper()
+    if log_level not in ("DEBUG", "INFO", "WARNING", "ERROR"):
+        raise ValueError(f"log_level must be DEBUG, INFO, WARNING, or ERROR, got {log_level}")
+    if "log_level" in coerced:
+        coerced["log_level"] = log_level
 
     # Apply in-memory (using coerced/validated values)
     for field, value in coerced.items():

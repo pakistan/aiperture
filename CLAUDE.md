@@ -210,6 +210,7 @@ Run `aiperture configure` for an interactive setup wizard, or use `PATCH /config
 | `AIPERTURE_RAPID_APPROVAL_MIN_COUNT` | `5` | Yes | Min approvals within window to flag as rubber-stamping |
 | `AIPERTURE_RATE_LIMIT_PER_MINUTE` | `200` | Yes | Max permission checks per session per minute (0 = unlimited) |
 | `AIPERTURE_SESSION_RISK_BUDGET` | `50.0` | Yes | Cumulative risk budget per session before escalating to ASK |
+| `AIPERTURE_LOG_LEVEL` | `DEBUG` | Yes | Logging verbosity: `DEBUG`, `INFO`, `WARNING`, `ERROR` |
 | `AIPERTURE_ARTIFACT_STORAGE_DIR` | `` | No | Artifact file storage directory |
 | `AIPERTURE_API_KEY` | `` | No | Bearer token for HTTP API auth (empty = open access) |
 | `AIPERTURE_API_HOST` | `0.0.0.0` | No | API server bind host |
