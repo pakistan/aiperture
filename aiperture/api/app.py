@@ -137,6 +137,13 @@ def _format_resp_summary(path: str, body: dict | str) -> str:
             parts.append(f"{_BG_GREEN}{_WHITE}{_BOLD} ALLOW {_RESET}")
         else:
             parts.append(f"{_BG_RED}{_WHITE}{_BOLD} DENY {_RESET}")
+    # PostToolUse hook — show recorded status
+    if "recorded" in body:
+        if body["recorded"]:
+            parts.append(f"{_GREEN}recorded{_RESET}")
+        else:
+            reason = body.get("reason", "skipped")
+            parts.append(f"{_DIM}skipped ({reason}){_RESET}")
     # Health
     status = body.get("status", "")
     if status == "healthy":
@@ -210,12 +217,6 @@ class RequestResponseLoggingMiddleware(BaseHTTPMiddleware):
         if resp_summary:
             lines.append(f"  {_GREEN}<{_RESET} {resp_summary}")
 
-        # Full bodies in dim for debugging
-        if req_body:
-            lines.append(f"  {_DIM}REQ:  {json.dumps(req_body, default=str)}{_RESET}")
-        if resp_body:
-            lines.append(f"  {_DIM}RESP: {json.dumps(resp_body, default=str)}{_RESET}")
-
         logger.info("\n".join(lines))
 
         return response
@@ -232,10 +233,13 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title="AIperture",
         description="The permission layer for AI agents. Controls what passes through.",
-        version="0.11.0",
+        version="0.11.1",
         lifespan=lifespan,
         dependencies=[Depends(require_api_key)],
     )
+
+    # Suppress uvicorn access logs — our middleware already logs everything better
+    logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
 
     # Verbose request/response logging with colors
     logging.getLogger("aiperture.requests").setLevel(logging.DEBUG)
