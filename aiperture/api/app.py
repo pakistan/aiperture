@@ -7,7 +7,7 @@ from fastapi import Depends, FastAPI
 
 from aiperture import plugins
 from aiperture.api.auth import require_api_key
-from aiperture.api.routes import artifacts, audit, config, health, intelligence, permissions
+from aiperture.api.routes import artifacts, audit, config, health, intelligence, metrics, permissions
 from aiperture.db import init_db
 
 
@@ -33,6 +33,7 @@ def create_app() -> FastAPI:
     app.include_router(intelligence.router, prefix="/intelligence", tags=["intelligence"])
     app.include_router(config.router, prefix="/config", tags=["config"])
     app.include_router(health.router, tags=["health"])
+    app.include_router(metrics.router, tags=["metrics"])
 
     # Register plugin routers if any
     plugin_router = plugins.get("router")

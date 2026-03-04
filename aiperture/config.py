@@ -38,6 +38,14 @@ class Settings(BaseSettings):
     intelligence_epsilon: float = 1.0  # local DP noise level (higher = less private)
     intelligence_min_orgs: int = 5  # minimum orgs before surfacing global signal
 
+    # Security hardening
+    sensitive_patterns: str = "*secret*,*credential*,*password*,*.env,*.pem,*.key,*token*,.env*,*id_rsa*,*private*"
+    pattern_max_age_days: int = 90  # auto-learned patterns expire after N days without human reconfirmation
+    rapid_approval_window_seconds: int = 60  # window for detecting rubber-stamping
+    rapid_approval_min_count: int = 5  # min rapid approvals to flag as rubber-stamping
+    rate_limit_per_minute: int = 200  # max permission checks per session per minute
+    session_risk_budget: float = 50.0  # cumulative risk budget per session
+
     # Compliance
     compliance_tracking_enabled: bool = True  # track checked vs unchecked tool executions
 
@@ -59,6 +67,12 @@ class Settings(BaseSettings):
         "intelligence_enabled",
         "intelligence_epsilon",
         "intelligence_min_orgs",
+        "sensitive_patterns",
+        "pattern_max_age_days",
+        "rapid_approval_window_seconds",
+        "rapid_approval_min_count",
+        "rate_limit_per_minute",
+        "session_risk_budget",
     })
 
     TUNABLE_DESCRIPTIONS: ClassVar[dict[str, str]] = {
@@ -69,7 +83,19 @@ class Settings(BaseSettings):
         "intelligence_enabled": "Enable cross-org differential-privacy intelligence",
         "intelligence_epsilon": "DP noise level (higher = more utility, less privacy)",
         "intelligence_min_orgs": "Minimum orgs required before surfacing global signal",
+        "sensitive_patterns": "Comma-separated glob patterns for sensitive files (skip scope normalization)",
+        "pattern_max_age_days": "Days before auto-learned patterns expire without human reconfirmation",
+        "rapid_approval_window_seconds": "Time window (seconds) for rubber-stamping detection",
+        "rapid_approval_min_count": "Min approvals within window to flag as rubber-stamping",
+        "rate_limit_per_minute": "Max permission checks per session per minute (0 = unlimited)",
+        "session_risk_budget": "Cumulative risk budget per session before escalating to ASK",
     }
+
+
+    @property
+    def sensitive_patterns_list(self) -> list[str]:
+        """Return sensitive_patterns as a list of glob patterns."""
+        return [p.strip() for p in self.sensitive_patterns.split(",") if p.strip()]
 
 
 def get_tunable_config() -> dict[str, Any]:
@@ -110,6 +136,12 @@ def update_settings(
         "intelligence_enabled": bool,
         "intelligence_epsilon": float,
         "intelligence_min_orgs": int,
+        "sensitive_patterns": str,
+        "pattern_max_age_days": int,
+        "rapid_approval_window_seconds": int,
+        "rapid_approval_min_count": int,
+        "rate_limit_per_minute": int,
+        "session_risk_budget": float,
     }
     coerced: dict[str, Any] = {}
     for field, value in updates.items():

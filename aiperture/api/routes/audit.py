@@ -124,3 +124,14 @@ def entity_history(
 def event_count(organization_id: str = "default"):
     """Total audit event count."""
     return {"count": store.count(organization_id)}
+
+
+@router.get("/verify-chain")
+def verify_chain(organization_id: str = "default"):
+    """Verify the hash chain integrity of the audit trail.
+
+    Walks the entire chain and checks that each event's hash matches
+    its computed value and links to the previous event's hash.
+    Any deletion, reordering, or tampering breaks the chain.
+    """
+    return store.verify_chain(organization_id)

@@ -21,6 +21,7 @@ When enrich=True, the engine also computes:
 import fnmatch
 import logging
 import threading
+import time
 import uuid
 from collections import OrderedDict
 from datetime import UTC, datetime, timedelta
@@ -89,6 +90,18 @@ class PermissionEngine:
         else:
             self._session_cache = _DefaultSessionCache(max_cache_size)
 
+        # Rubber-stamping tracker: key → list of timestamps
+        self._rapid_approval_tracker: dict[str, list[float]] = {}
+        self._rapid_lock = threading.Lock()
+
+        # Rate limiter: (session_id, org_id) → list of timestamps
+        self._rate_tracker: dict[str, list[float]] = {}
+        self._rate_lock = threading.Lock()
+
+        # Session risk budget: session_id → cumulative risk score
+        self._session_risk_budget: dict[str, float] = {}
+        self._risk_budget_lock = threading.Lock()
+
     def check(
         self,
         tool: str,
@@ -120,11 +133,59 @@ class PermissionEngine:
         Returns:
             PermissionVerdict with decision and optional enrichment.
         """
+        from aiperture.metrics import (
+            PERMISSION_CHECKS, RATE_LIMITED, SESSION_CACHE_HITS,
+            SESSION_CACHE_MISSES, AUTO_APPROVED, AUTO_DENIED,
+            RISK_BUDGET_EXHAUSTED, track_check_duration,
+        )
+
+        with track_check_duration():
+            return self._check_inner(
+                tool, action, scope, permissions,
+                task_id=task_id, session_id=session_id,
+                organization_id=organization_id, runtime_id=runtime_id,
+                enrich=enrich, content_hash=content_hash,
+            )
+
+    def _check_inner(
+        self,
+        tool: str,
+        action: str,
+        scope: str,
+        permissions: list[Permission],
+        *,
+        task_id: str = "",
+        session_id: str = "",
+        organization_id: str = "default",
+        runtime_id: str = "",
+        enrich: bool = False,
+        content_hash: str = "",
+    ) -> PermissionVerdict:
+        from aiperture.metrics import (
+            PERMISSION_CHECKS, RATE_LIMITED, SESSION_CACHE_HITS,
+            SESSION_CACHE_MISSES, AUTO_APPROVED, AUTO_DENIED,
+            RISK_BUDGET_EXHAUSTED,
+        )
+
+        # Rate limiting: deny if session exceeds checks/minute
+        if session_id:
+            rate_verdict = self._check_rate_limit(session_id, organization_id, tool, action, scope, enrich)
+            if rate_verdict is not None:
+                RATE_LIMITED.inc()
+                PERMISSION_CHECKS.labels(decision="deny", decided_by="rate_limit").inc()
+                self._log(
+                    tool, action, scope, PermissionDecision.DENY, "rate_limit",
+                    task_id=task_id, session_id=session_id,
+                    organization_id=organization_id, runtime_id=runtime_id,
+                )
+                return rate_verdict
+
         # 0. Session memory (organization_id + content_hash are part of the cache key)
         cache_key = (organization_id, tool, action, scope, session_id, content_hash)
         if session_id:
             cached = self._session_cache.get(cache_key)
             if cached is not None:
+                SESSION_CACHE_HITS.inc()
                 verdict = self._build_verdict(
                     cached, "session_memory", tool, action, scope,
                     organization_id=organization_id, enrich=enrich,
@@ -136,6 +197,9 @@ class PermissionEngine:
                     organization_id=organization_id, runtime_id=runtime_id,
                 )
                 return verdict
+
+        if session_id:
+            SESSION_CACHE_MISSES.inc()
 
         # 1. Check task-scoped grants (ReBAC)
         if task_id:
@@ -157,6 +221,17 @@ class PermissionEngine:
         # 2. Check learned auto-decisions
         learned = self._check_learned(tool, action, scope, organization_id)
         if learned is not None:
+            # Session risk budget: escalate ALLOW to ASK if budget exhausted
+            if learned == PermissionDecision.ALLOW and session_id:
+                original = learned
+                learned = self._apply_risk_budget(session_id, tool, action, scope, learned)
+                if learned != original:
+                    RISK_BUDGET_EXHAUSTED.inc()
+            if learned == PermissionDecision.ALLOW:
+                AUTO_APPROVED.inc()
+            elif learned == PermissionDecision.DENY:
+                AUTO_DENIED.inc()
+            PERMISSION_CHECKS.labels(decision=learned.value, decided_by="auto_learned").inc()
             self._log(
                 tool, action, scope, learned, "auto_learned",
                 task_id=task_id, session_id=session_id,
@@ -171,6 +246,14 @@ class PermissionEngine:
         # 3. Static permission rules — glob match with specificity
         decision = self._match_static(tool, action, scope, permissions)
 
+        # Session risk budget: escalate ALLOW to ASK if budget exhausted
+        if decision == PermissionDecision.ALLOW and session_id:
+            original = decision
+            decision = self._apply_risk_budget(session_id, tool, action, scope, decision)
+            if decision != original:
+                RISK_BUDGET_EXHAUSTED.inc()
+
+        PERMISSION_CHECKS.labels(decision=decision.value, decided_by="static_rule").inc()
         self._log(
             tool, action, scope, decision, "static_rule",
             task_id=task_id, session_id=session_id,
@@ -263,13 +346,20 @@ class PermissionEngine:
                 "Invalid or missing challenge token. "
                 "Human decisions must include the challenge from the original permission check."
             )
+        # Rubber-stamping detection: flag rapid approvals (requires session context)
+        effective_decided_by = f"human:{decided_by}"
+        if decision == PermissionDecision.ALLOW and session_id:
+            effective_decided_by = self._check_rapid_approval(
+                session_id, tool, action, decided_by,
+            )
+
         # Cache in session memory
         if session_id:
             cache_key = (organization_id, tool, action, scope, session_id, "")
             self._session_cache.set(cache_key, decision)
 
         return self._log(
-            tool, action, scope, decision, f"human:{decided_by}",
+            tool, action, scope, decision, effective_decided_by,
             task_id=task_id, session_id=session_id,
             organization_id=organization_id, runtime_id=runtime_id,
         )
@@ -319,6 +409,130 @@ class PermissionEngine:
         return count
 
     # --- Internal methods ---
+
+    def _check_rapid_approval(
+        self,
+        session_id: str,
+        tool: str,
+        action: str,
+        decided_by: str,
+    ) -> str:
+        """Detect rubber-stamping: rapid approvals for the same pattern.
+
+        Returns the decided_by string, with `:rapid` suffix if flagged.
+        """
+        import aiperture.config
+
+        settings = aiperture.config.settings
+        window = settings.rapid_approval_window_seconds
+        min_count = settings.rapid_approval_min_count
+
+        tracker_key = f"{session_id}:{tool}:{action}"
+        now = time.time()
+
+        with self._rapid_lock:
+            timestamps = self._rapid_approval_tracker.get(tracker_key, [])
+            # Prune timestamps outside the window
+            timestamps = [t for t in timestamps if now - t <= window]
+            timestamps.append(now)
+            self._rapid_approval_tracker[tracker_key] = timestamps
+
+            if len(timestamps) >= min_count:
+                logger.warning(
+                    "Rubber-stamping detected: %d approvals for %s.%s in %ds by %s",
+                    len(timestamps), tool, action, window, decided_by,
+                )
+                return f"human:{decided_by}:rapid"
+
+        return f"human:{decided_by}"
+
+    def _check_rate_limit(
+        self,
+        session_id: str,
+        organization_id: str,
+        tool: str,
+        action: str,
+        scope: str,
+        enrich: bool,
+    ) -> PermissionVerdict | None:
+        """Check per-session rate limit. Returns DENY verdict if exceeded."""
+        import aiperture.config
+
+        limit = aiperture.config.settings.rate_limit_per_minute
+        if limit <= 0:
+            return None  # Unlimited
+
+        tracker_key = f"{session_id}:{organization_id}"
+        now = time.time()
+        window = 60.0  # 1 minute
+
+        with self._rate_lock:
+            timestamps = self._rate_tracker.get(tracker_key, [])
+            timestamps = [t for t in timestamps if now - t <= window]
+            timestamps.append(now)
+            self._rate_tracker[tracker_key] = timestamps
+
+            if len(timestamps) > limit:
+                logger.warning(
+                    "Rate limit exceeded: %d checks/min for session %s (limit %d)",
+                    len(timestamps), session_id, limit,
+                )
+                return PermissionVerdict(
+                    decision=PermissionDecision.DENY,
+                    decided_by="rate_limit",
+                    risk=RiskAssessment(tier=RiskTier.MEDIUM, score=0.5, factors=["rate_limit_exceeded"]),
+                )
+
+        return None
+
+    _RISK_SCORE_MAP = {
+        RiskTier.LOW: 0.1,
+        RiskTier.MEDIUM: 0.3,
+        RiskTier.HIGH: 0.7,
+        RiskTier.CRITICAL: 1.0,
+    }
+
+    def _apply_risk_budget(
+        self,
+        session_id: str,
+        tool: str,
+        action: str,
+        scope: str,
+        decision: PermissionDecision,
+    ) -> PermissionDecision:
+        """Accumulate session risk and escalate to ASK if budget exhausted."""
+        import aiperture.config
+        from aiperture.permissions.risk import classify_risk
+
+        budget_limit = aiperture.config.settings.session_risk_budget
+        if budget_limit <= 0:
+            return decision  # Disabled
+
+        risk = classify_risk(tool, action, scope)
+        score = self._RISK_SCORE_MAP.get(risk.tier, 0.1)
+
+        with self._risk_budget_lock:
+            current = self._session_risk_budget.get(session_id, 0.0)
+            current += score
+            self._session_risk_budget[session_id] = current
+
+            if current > budget_limit:
+                logger.warning(
+                    "Session risk budget exhausted for %s (%.1f/%.1f) — escalating %s.%s to ASK",
+                    session_id, current, budget_limit, tool, action,
+                )
+                return PermissionDecision.ASK
+
+        return decision
+
+    def get_session_risk_budget(self, session_id: str) -> float:
+        """Return remaining risk budget for a session."""
+        import aiperture.config
+
+        budget_limit = aiperture.config.settings.session_risk_budget
+        with self._risk_budget_lock:
+            used = self._session_risk_budget.get(session_id, 0.0)
+        return max(0.0, budget_limit - used)
 
     def _build_verdict(
         self,
@@ -613,9 +827,23 @@ class PermissionEngine:
         if not logs:
             return None
 
-        matching = [log for log in logs if fnmatch.fnmatch(scope, log.scope)]
+        # Exclude rubber-stamped decisions (`:rapid` suffix)
+        matching = [
+            log for log in logs
+            if fnmatch.fnmatch(scope, log.scope) and not log.decided_by.endswith(":rapid")
+        ]
 
         if len(matching) < settings.permission_learning_min_decisions:
+            return None
+
+        # Temporal decay: skip auto-approval if most recent decision is too old
+        most_recent = max(log.created_at for log in matching)
+        age_days = (datetime.now(UTC).replace(tzinfo=None) - most_recent).total_seconds() / 86400
+        if age_days > settings.pattern_max_age_days:
+            logger.info(
+                "Pattern expired for %s.%s on %s (last decision %.0f days ago, max %d)",
+                tool, action, scope, age_days, settings.pattern_max_age_days,
+            )
             return None
 
         allow_count = sum(1 for log in matching if log.decision == PermissionDecision.ALLOW)

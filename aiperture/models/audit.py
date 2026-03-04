@@ -31,4 +31,8 @@ class AuditEvent(SQLModel, table=True):
     previous_state: dict | None = Field(default=None, sa_column=Column(JSON))
     new_state: dict | None = Field(default=None, sa_column=Column(JSON))
 
+    # Hash chain for tamper-evident audit trail
+    previous_hash: str = Field(default="")
+    event_hash: str = Field(default="")
+
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC).replace(tzinfo=None))

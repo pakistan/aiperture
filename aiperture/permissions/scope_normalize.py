@@ -6,6 +6,7 @@
 Normalized scopes require higher thresholds than exact matches.
 """
 
+import fnmatch
 import re
 import shlex
 
@@ -129,6 +130,10 @@ def normalize_scope(tool: str, action: str, scope: str) -> str | None:
     if not scope or "*" in scope or "?" in scope:
         return None  # Already a glob or empty
 
+    # Skip normalization for sensitive paths — require exact-match learning
+    if _is_sensitive(scope):
+        return None
+
     tool_lower = tool.lower()
     if tool_lower in ("shell", "bash", "terminal"):
         return _normalize_shell_scope(scope)
@@ -190,6 +195,10 @@ def _normalize_filesystem_scope(scope: str) -> str | None:
         "config.yaml" -> "*.yaml"
         "src/**/*.py" -> None (already a glob)
     """
+    # Skip normalization for sensitive filesystem paths
+    if _is_sensitive(scope):
+        return None
+
     # Must have an extension to normalize
     ext_match = _EXT_RE.search(scope)
     if not ext_match:
@@ -204,3 +213,20 @@ def _normalize_filesystem_scope(scope: str) -> str | None:
         return f"{directory}/*{ext}"
     else:
         return f"*{ext}"
+
+
+def _is_sensitive(scope: str) -> bool:
+    """Check if scope matches any sensitive pattern from config.
+
+    Sensitive paths skip normalization so they require exact-match learning
+    (e.g., 10 approvals of `src/secrets.py` specifically, not `src/*.py`).
+    """
+    import aiperture.config
+
+    # Extract just the filename for matching (handle paths like "src/config/secrets.py")
+    filename = scope.rsplit("/", 1)[-1] if "/" in scope else scope
+
+    for pattern in aiperture.config.settings.sensitive_patterns_list:
+        if fnmatch.fnmatch(filename, pattern) or fnmatch.fnmatch(scope, pattern):
+            return True
+    return False

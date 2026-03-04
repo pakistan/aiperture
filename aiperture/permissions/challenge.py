@@ -99,9 +99,12 @@ def verify_challenge(
         return False
 
     # Check if nonce was already consumed (replay protection)
+    # First check in-memory cache, then fall back to database
     with _nonce_lock:
         if nonce in _consumed_nonces:
             return False
+    if _check_nonce_in_db(nonce):
+        return False
 
     # Recompute HMAC (includes org and session binding)
     message = f"{tool}|{action}|{scope}|{organization_id}|{session_id}|{nonce}|{issued_at}".encode()
@@ -118,6 +121,9 @@ def verify_challenge(
         _consumed_nonces[nonce] = now
         _prune_expired_nonces(now)
 
+    # Persist to database for replay protection across restarts
+    _persist_nonce(nonce)
+
     return True
 
 
@@ -127,6 +133,77 @@ def _prune_expired_nonces(now: float) -> None:
     expired = [n for n, t in _consumed_nonces.items() if t < cutoff]
     for n in expired:
         del _consumed_nonces[n]
+
+
+def _check_nonce_in_db(nonce: str) -> bool:
+    """Check if a nonce exists in the database. Returns True if consumed."""
+    try:
+        from sqlmodel import Session, select
+
+        from aiperture.db import get_engine
+        from aiperture.models.permission import ConsumedNonce
+
+        with Session(get_engine()) as session:
+            result = session.get(ConsumedNonce, nonce)
+            if result is not None:
+                # Add to in-memory cache so we don't hit DB again
+                with _nonce_lock:
+                    _consumed_nonces[nonce] = time.time()
+                return True
+    except Exception:
+        pass  # DB unavailable — rely on in-memory cache only
+    return False
+
+
+def _persist_nonce(nonce: str) -> None:
+    """Persist a consumed nonce to database. Fire-and-forget."""
+    try:
+        from sqlmodel import Session
+
+        from aiperture.db import get_engine
+        from aiperture.models.permission import ConsumedNonce
+
+        with Session(get_engine()) as session:
+            session.add(ConsumedNonce(nonce=nonce))
+            session.commit()
+    except Exception:
+        pass  # Fire-and-forget — in-memory cache is the primary guard
+
+
+def cleanup_expired_nonces() -> int:
+    """Remove expired nonces from both in-memory cache and database.
+
+    Returns the number of nonces cleaned from the database.
+    """
+    now = time.time()
+    cutoff = now - DEFAULT_MAX_AGE_SECONDS
+
+    # Clean in-memory
+    with _nonce_lock:
+        _prune_expired_nonces(now)
+
+    # Clean database
+    db_count = 0
+    try:
+        from datetime import UTC, datetime
+
+        from sqlmodel import Session, select
+
+        from aiperture.db import get_engine
+        from aiperture.models.permission import ConsumedNonce
+
+        cutoff_dt = datetime.fromtimestamp(cutoff, tz=UTC).replace(tzinfo=None)
+        with Session(get_engine()) as session:
+            expired = session.exec(
+                select(ConsumedNonce).where(ConsumedNonce.consumed_at < cutoff_dt)
+            ).all()
+            for n in expired:
+                session.delete(n)
+                db_count += 1
+            session.commit()
+    except Exception:
+        pass
+    return db_count
 
 
 def reset_secret_for_testing() -> None:

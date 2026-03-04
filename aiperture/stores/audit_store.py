@@ -4,6 +4,8 @@ Every permission check, every artifact stored, every human decision
 gets an audit event. This is the compliance backbone.
 """
 
+import hashlib
+import json
 import logging
 import uuid
 from datetime import datetime
@@ -13,6 +15,8 @@ from sqlmodel import Session, select
 
 from aiperture.db import get_engine
 from aiperture.models.audit import AuditEvent
+
+_GENESIS_HASH = "0" * 64  # sentinel for the first event in the chain
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +58,16 @@ class AuditStore:
         )
         try:
             with Session(get_engine()) as session:
+                # Hash chaining: link to previous event
+                prev = session.exec(
+                    select(AuditEvent)
+                    .where(AuditEvent.organization_id == event.organization_id)
+                    .order_by(AuditEvent.id.desc())  # type: ignore[union-attr]
+                    .limit(1)
+                ).first()
+                event.previous_hash = prev.event_hash if (prev and prev.event_hash) else _GENESIS_HASH
+                event.event_hash = _compute_event_hash(event)
+
                 session.add(event)
                 session.commit()
                 session.refresh(event)
@@ -150,3 +164,70 @@ class AuditStore:
                 )
             ).one()
             return result
+
+    def verify_chain(self, organization_id: str = "default") -> dict:
+        """Verify the hash chain integrity of the audit trail.
+
+        Walks the chain and checks that each event's hash matches its
+        computed value and links to the previous event's hash.
+
+        Returns a dict with verification results.
+        """
+        with Session(get_engine()) as session:
+            events = session.exec(
+                select(AuditEvent)
+                .where(AuditEvent.organization_id == organization_id)
+                .order_by(AuditEvent.id.asc())  # type: ignore[union-attr]
+            ).all()
+
+        if not events:
+            return {"valid": True, "total_events": 0, "verified": 0, "errors": []}
+
+        errors = []
+        verified = 0
+        prev_hash = _GENESIS_HASH
+
+        for event in events:
+            # Skip events without hash chain (pre-migration)
+            if not event.event_hash:
+                prev_hash = _GENESIS_HASH
+                continue
+
+            # Check previous_hash links correctly
+            if event.previous_hash and event.previous_hash != prev_hash:
+                errors.append({
+                    "event_id": event.event_id,
+                    "error": "broken_chain",
+                    "expected_previous": prev_hash,
+                    "actual_previous": event.previous_hash,
+                })
+
+            # Recompute and verify event hash
+            expected_hash = _compute_event_hash(event)
+            if event.event_hash != expected_hash:
+                errors.append({
+                    "event_id": event.event_id,
+                    "error": "tampered_hash",
+                    "expected": expected_hash,
+                    "actual": event.event_hash,
+                })
+
+            prev_hash = event.event_hash
+            verified += 1
+
+        return {
+            "valid": len(errors) == 0,
+            "total_events": len(events),
+            "verified": verified,
+            "errors": errors,
+        }
+
+
+def _compute_event_hash(event: AuditEvent) -> str:
+    """Compute SHA-256 hash for an audit event."""
+    details_json = json.dumps(event.details, sort_keys=True, default=str) if event.details else ""
+    payload = (
+        f"{event.previous_hash}|{event.event_id}|{event.event_type}|"
+        f"{event.created_at.isoformat()}|{event.summary}|{details_json}"
+    )
+    return hashlib.sha256(payload.encode()).hexdigest()

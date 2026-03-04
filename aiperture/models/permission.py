@@ -47,6 +47,15 @@ class PermissionLog(SQLModel, table=True):
     revoked_at: datetime | None = Field(default=None)  # soft-delete for revocation
 
 
+class ConsumedNonce(SQLModel, table=True):
+    """Persisted HMAC nonces for replay protection across server restarts."""
+
+    __tablename__ = "consumed_nonces"
+
+    nonce: str = Field(primary_key=True)
+    consumed_at: datetime = Field(default_factory=lambda: datetime.now(UTC).replace(tzinfo=None))
+
+
 class TaskPermissionStatus(str, enum.Enum):
     ACTIVE = "active"
     PENDING = "pending"
