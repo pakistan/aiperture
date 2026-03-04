@@ -306,7 +306,7 @@ If you're a solo developer running Claude Code on personal projects, `CLAUDE.md`
 | **Nonce Persistence** | HMAC nonces persisted to database — closes replay attack window across server restarts |
 | **Prometheus Metrics** | `GET /metrics` — permission check counters, latency histograms, cache hit rates, risk budget counters |
 | **Health Check** | `GET /health` — database connectivity probe, returns healthy/degraded status |
-| **Circuit Breaker** | Database failures during permission checks fail closed (default deny), never crash or allow |
+| **Circuit Breaker** | Database failures during permission checks fail closed (default ask), never crash or allow |
 | **REST API** | FastAPI server — works with any agent runtime over HTTP |
 | **MCP Server** | 14 tools for Claude Code and other MCP-compatible runtimes |
 | **CLI** | `aiperture setup-claude`, `aiperture remove-claude`, `aiperture serve`, `aiperture init-db`, `aiperture configure`, `aiperture bootstrap`, `aiperture revoke` |
@@ -320,7 +320,7 @@ Aperture resolves permissions in this order, stopping at the first match:
 2. Task grants (ReBAC) →  Scoped permission for this specific task?
 3. Learned patterns   →  10+ consistent human decisions? Auto-decide.
 4. Static RBAC rules  →  Glob-matched rules (most specific wins).
-5. Default deny       →  No match? Deny.
+5. Default ask        →  No match? Ask the human. (Configurable to deny.)
 ```
 
 When enrichment is enabled, each verdict also includes:
@@ -357,7 +357,7 @@ The risk scorer doesn't just look at the top-level command. It unpacks shell wra
 
 ### Fail-closed circuit breaker
 
-If the database becomes unavailable during a permission check, the engine **fails closed** — it defaults to deny rather than crashing or allowing. This ensures database outages never result in unauthorized actions.
+If the database becomes unavailable during a permission check, the engine **fails closed** — it falls through to the default decision (ASK by default, configurable to DENY via `AIPERTURE_DEFAULT_DECISION`) rather than crashing or allowing. This ensures database outages never result in unauthorized actions.
 
 Check database health anytime:
 
@@ -490,6 +490,7 @@ All settings via environment variables (prefix `AIPERTURE_`):
 | `AIPERTURE_PERMISSION_LEARNING_MIN_DECISIONS` | `10` | Min decisions before auto-deciding |
 | `AIPERTURE_AUTO_APPROVE_THRESHOLD` | `0.95` | Approval rate to trigger auto-approve |
 | `AIPERTURE_AUTO_DENY_THRESHOLD` | `0.05` | Approval rate to trigger auto-deny |
+| `AIPERTURE_DEFAULT_DECISION` | `ask` | Fallback when no rule or pattern matches: `ask` or `deny` |
 | `AIPERTURE_INTELLIGENCE_ENABLED` | `false` | Cross-org intelligence (opt-in) |
 | `AIPERTURE_SENSITIVE_PATTERNS` | `*secret*,*credential*,...` | Glob patterns for sensitive files (skip normalization) |
 | `AIPERTURE_PATTERN_MAX_AGE_DAYS` | `90` | Days before auto-learned patterns expire |

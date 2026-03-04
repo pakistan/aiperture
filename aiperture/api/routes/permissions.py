@@ -76,7 +76,7 @@ def check_permission(req: CheckRequest, enrich: bool = False):
     2. Task-scoped grants (ReBAC)
     3. Learned auto-decisions (from human patterns)
     4. Static permission rules (glob matching)
-    5. Default deny
+    5. Default decision (configurable, default: ask)
 
     Set ?enrich=true to get risk tier, explanation, crowd signal, and similar patterns.
     """

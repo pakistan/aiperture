@@ -82,21 +82,21 @@ class TestCheckPermission:
         assert isinstance(result["risk"]["factors"], list)
         assert isinstance(result["risk"]["reversible"], bool)
 
-    def test_check_permission_deny_with_no_rules(self):
-        """No static rules and no learned patterns means deny."""
+    def test_check_permission_ask_with_no_rules(self):
+        """No static rules and no learned patterns means ask (default)."""
         result = json.loads(check_permission(
             tool="filesystem",
             action="write",
             scope="production/db.conf",
         ))
-        assert result["decision"] == "deny"
+        assert result["decision"] == "ask"
 
-    def test_check_permission_deny_has_challenge(self):
-        """DENY verdict includes HMAC challenge for approve/deny flow."""
+    def test_check_permission_ask_has_challenge(self):
+        """ASK verdict includes HMAC challenge for approve/deny flow."""
         result = json.loads(check_permission(
             tool="shell", action="execute", scope="deploy.sh",
         ))
-        assert result["decision"] == "deny"
+        assert result["decision"] == "ask"
         assert result["challenge"]
         assert result["challenge_nonce"]
         assert result["challenge_issued_at"] > 0
@@ -108,7 +108,7 @@ class TestCheckPermission:
             action="execute",
             scope="rm -rf /",
         ))
-        assert result["decision"] == "deny"
+        assert result["decision"] == "ask"
         assert result["risk"]["tier"] == "critical"
         assert result["risk"]["score"] == 1.0
         assert result["risk"]["reversible"] is False
@@ -687,15 +687,15 @@ class TestEndToEndWorkflow:
     """Integration: full permission lifecycle via MCP tools."""
 
     def test_check_approve_recheck_flow(self):
-        """Full flow: check (deny) -> approve -> check with session (allow)."""
-        # Step 1: Initial check is denied (no rules, no history)
+        """Full flow: check (ask) -> approve -> check with session (allow)."""
+        # Step 1: Initial check returns ask (no rules, no history)
         r1 = json.loads(check_permission(
             tool="shell",
             action="execute",
             scope="deploy.sh",
             session_id="session-e2e",
         ))
-        assert r1["decision"] == "deny"
+        assert r1["decision"] == "ask"
 
         # Step 2: Human approves (using challenge from step 1)
         approve = json.loads(approve_action(
@@ -772,11 +772,11 @@ class TestEndToEndWorkflow:
 
     def test_agent_self_approval_blocked(self):
         """Agent cannot self-approve without a valid challenge token."""
-        # Step 1: Check → denied
+        # Step 1: Check → ask (default)
         r1 = json.loads(check_permission(
             tool="shell", action="execute", scope="dangerous.sh",
         ))
-        assert r1["decision"] == "deny"
+        assert r1["decision"] == "ask"
 
         # Step 2: Agent tries to approve without challenge → blocked
         with pytest.raises(ToolError, match="challenge"):
@@ -785,8 +785,8 @@ class TestEndToEndWorkflow:
                 decided_by="user",
             )
 
-        # Step 3: Still denied
+        # Step 3: Still ask (not auto-approved)
         r2 = json.loads(check_permission(
             tool="shell", action="execute", scope="dangerous.sh",
         ))
-        assert r2["decision"] == "deny"
+        assert r2["decision"] == "ask"

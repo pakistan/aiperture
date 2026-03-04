@@ -7,7 +7,7 @@ Resolution order:
 2. Task-scoped grants (ReBAC) — if active, use that decision
 3. Learned auto-decisions — if pattern is strong enough
 4. Static permission rules — glob match with specificity ranking
-5. Default deny
+5. Default decision (configurable, default: ask)
 
 When enrich=True, the engine also computes:
 - Risk classification
@@ -248,24 +248,41 @@ class PermissionEngine:
             )
 
         # 3. Static permission rules — glob match with specificity
-        decision = self._match_static(tool, action, scope, permissions)
+        static_decision = self._match_static(tool, action, scope, permissions)
 
-        # Session risk budget: escalate ALLOW to ASK if budget exhausted
-        if decision == PermissionDecision.ALLOW and session_id:
-            original = decision
-            decision = self._apply_risk_budget(session_id, tool, action, scope, decision)
-            if decision != original:
-                RISK_BUDGET_EXHAUSTED.inc()
+        if static_decision is not None:
+            # Session risk budget: escalate ALLOW to ASK if budget exhausted
+            if static_decision == PermissionDecision.ALLOW and session_id:
+                original = static_decision
+                static_decision = self._apply_risk_budget(session_id, tool, action, scope, static_decision)
+                if static_decision != original:
+                    RISK_BUDGET_EXHAUSTED.inc()
 
-        PERMISSION_CHECKS.labels(decision=decision.value, decided_by="static_rule").inc()
+            PERMISSION_CHECKS.labels(decision=static_decision.value, decided_by="static_rule").inc()
+            self._log(
+                tool, action, scope, static_decision, "static_rule",
+                task_id=task_id, session_id=session_id,
+                organization_id=organization_id, runtime_id=runtime_id,
+            )
+            self._log_decision(static_decision, tool, action, scope, "static_rule")
+            return self._build_verdict(
+                static_decision, "static_rule", tool, action, scope,
+                organization_id=organization_id, enrich=enrich,
+                session_id=session_id,
+            )
+
+        # 4. Default decision (configurable, default: ask)
+        import aiperture.config
+        decision = PermissionDecision(aiperture.config.settings.default_decision)
+        PERMISSION_CHECKS.labels(decision=decision.value, decided_by="default").inc()
         self._log(
-            tool, action, scope, decision, "static_rule",
+            tool, action, scope, decision, "default",
             task_id=task_id, session_id=session_id,
             organization_id=organization_id, runtime_id=runtime_id,
         )
-        self._log_decision(decision, tool, action, scope, "static_rule")
+        self._log_decision(decision, tool, action, scope, "default")
         return self._build_verdict(
-            decision, "static_rule", tool, action, scope,
+            decision, "default", tool, action, scope,
             organization_id=organization_id, enrich=enrich,
             session_id=session_id,
         )
@@ -733,8 +750,11 @@ class PermissionEngine:
         action: str,
         scope: str,
         permissions: list[Permission],
-    ) -> PermissionDecision:
-        """Match against static rules. Most specific match wins."""
+    ) -> PermissionDecision | None:
+        """Match against static rules. Most specific match wins.
+
+        Returns None if no static rule matches (caller applies default decision).
+        """
         best_match: Permission | None = None
         best_specificity = -1
 
@@ -752,7 +772,7 @@ class PermissionEngine:
                 best_match = perm
 
         if best_match is None:
-            return PermissionDecision.DENY
+            return None
 
         return best_match.decision
 
@@ -767,7 +787,7 @@ class PermissionEngine:
         """Check task-scoped ReBAC grants.
 
         On database failure, returns None (fail closed — falls through to
-        static rules then default deny).
+        static rules then default decision).
         """
         now = datetime.now(UTC).replace(tzinfo=None)
         try:
@@ -814,7 +834,7 @@ class PermissionEngine:
         to auto-approve destructive commands.
 
         On database failure, returns None (fail closed — falls through to
-        static rules then default deny).
+        static rules then default decision).
         """
         import aiperture.config
 

@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     permission_learning_min_decisions: int = 10
     auto_approve_threshold: float = 0.95  # >95% approval rate -> auto-approve
     auto_deny_threshold: float = 0.05  # <5% approval rate -> auto-deny
+    default_decision: str = "ask"  # "ask" or "deny" — fallback when no rule/pattern matches
 
     # Intelligence (cross-org)
     intelligence_enabled: bool = False  # opt-in
@@ -79,6 +80,7 @@ class Settings(BaseSettings):
         "rapid_approval_min_count",
         "rate_limit_per_minute",
         "session_risk_budget",
+        "default_decision",
         "log_level",
     })
 
@@ -95,6 +97,7 @@ class Settings(BaseSettings):
         "rapid_approval_window_seconds": "Time window (seconds) for rubber-stamping detection",
         "rapid_approval_min_count": "Min approvals within window to flag as rubber-stamping",
         "rate_limit_per_minute": "Max permission checks per session per minute (0 = unlimited)",
+        "default_decision": "Fallback decision when no rule or learned pattern matches: 'ask' or 'deny'",
         "session_risk_budget": "Cumulative risk budget per session before escalating to ASK",
         "log_level": "Logging verbosity: DEBUG (all decisions), INFO (deny+ask), WARNING (deny only), ERROR",
     }
@@ -149,6 +152,7 @@ def update_settings(
         "rapid_approval_window_seconds": int,
         "rapid_approval_min_count": int,
         "rate_limit_per_minute": int,
+        "default_decision": str,
         "session_risk_budget": float,
         "log_level": str,
     }
@@ -191,6 +195,12 @@ def update_settings(
         raise ValueError(f"log_level must be DEBUG, INFO, WARNING, or ERROR, got {log_level}")
     if "log_level" in coerced:
         coerced["log_level"] = log_level
+
+    default_decision = coerced.get("default_decision", settings.default_decision).lower()
+    if default_decision not in ("ask", "deny"):
+        raise ValueError(f"default_decision must be 'ask' or 'deny', got '{default_decision}'")
+    if "default_decision" in coerced:
+        coerced["default_decision"] = default_decision
 
     # Apply in-memory (using coerced/validated values)
     for field, value in coerced.items():

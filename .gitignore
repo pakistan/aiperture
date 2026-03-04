@@ -3,6 +3,8 @@ __pycache__/
 *.egg-info/
 .venv*/
 *.db
+*.db-shm
+*.db-wal
 *.sqlite
 .pytest_cache/
 .ruff_cache/

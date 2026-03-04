@@ -110,8 +110,8 @@ class TestLearningLoop:
         aiperture.config.settings.auto_approve_threshold = 0.90
         aiperture.config.settings.auto_deny_threshold = 0.05
 
-    def test_deny_with_no_history(self):
-        """First check with no rules and no history should deny."""
+    def test_ask_with_no_history(self):
+        """First check with no rules and no history should ask (default)."""
         app = create_app()
         client = TestClient(app)
         resp = client.post("/permissions/check", json={
@@ -121,7 +121,7 @@ class TestLearningLoop:
             "permissions": [],
         })
         assert resp.status_code == 200
-        assert resp.json()["decision"] == "deny"
+        assert resp.json()["decision"] == "ask"
 
     def test_auto_approve_after_learning(self):
         """After enough human approvals, the same action is auto-approved."""
@@ -162,13 +162,14 @@ class TestLearningLoop:
         app = create_app()
         client = TestClient(app)
 
-        # Record 5 denials
+        # Use a low-risk scope so learning engine doesn't skip it
+        # (HIGH/CRITICAL risk actions skip auto-learning)
         for i in range(5):
-            ch = _api_challenge(client, "shell", "execute", "rm -rf /", organization_id="deny-org")
+            ch = _api_challenge(client, "filesystem", "write", "config.yaml", organization_id="deny-org")
             resp = client.post("/permissions/record", json={
-                "tool": "shell",
-                "action": "execute",
-                "scope": "rm -rf /",
+                "tool": "filesystem",
+                "action": "write",
+                "scope": "config.yaml",
                 "decision": "deny",
                 "decided_by": f"user-{i}",
                 "organization_id": "deny-org",
@@ -178,9 +179,9 @@ class TestLearningLoop:
 
         # Now check — should be auto-denied
         resp = client.post("/permissions/check", json={
-            "tool": "shell",
-            "action": "execute",
-            "scope": "rm -rf /",
+            "tool": "filesystem",
+            "action": "write",
+            "scope": "config.yaml",
             "permissions": [],
             "organization_id": "deny-org",
         })
@@ -315,8 +316,8 @@ class TestMCPToolDiscovery:
 class TestMCPPermissionCalls:
     """Call permission tools over the real MCP protocol."""
 
-    async def test_check_permission_denies_with_no_history(self, tmp_path):
-        """check_permission returns deny when there's no decision history."""
+    async def test_check_permission_asks_with_no_history(self, tmp_path):
+        """check_permission returns ask when there's no decision history."""
         from mcp import ClientSession, stdio_client
 
         params = _mcp_server_params(str(tmp_path / "test.db"))
@@ -330,7 +331,7 @@ class TestMCPPermissionCalls:
                 })
                 assert not result.isError
                 data = json.loads(result.content[0].text)
-                assert data["decision"] == "deny"
+                assert data["decision"] == "ask"
 
     async def test_check_permission_includes_risk(self, tmp_path):
         """check_permission verdict includes risk assessment."""
@@ -438,7 +439,7 @@ class TestMCPLearningLoop:
                     "organization_id": "mcp-test-org",
                 })
                 data = json.loads(result.content[0].text)
-                assert data["decision"] == "deny", "Expected deny with no history"
+                assert data["decision"] == "ask", "Expected ask with no history"
 
                 # Step 2: Human approves 3 times (meets min_decisions=3)
                 for i in range(3):

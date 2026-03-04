@@ -162,10 +162,10 @@ class TestChallengeInEngine:
                 challenge_issued_at=verdict.challenge_issued_at,
             )
 
-    def test_deny_verdict_has_challenge(self):
+    def test_non_allow_verdict_has_challenge(self):
         engine = PermissionEngine()
         verdict = engine.check("shell", "execute", "anything", [])
-        assert verdict.decision == "deny"
+        assert verdict.decision == "ask"
         assert verdict.challenge
         assert verdict.challenge_nonce
         assert verdict.challenge_issued_at > 0
@@ -181,9 +181,9 @@ class TestChallengeInEngine:
         """Full flow: agent tries to self-approve without valid challenge — rejected."""
         engine = PermissionEngine()
 
-        # Agent checks permission → gets DENY
+        # Agent checks permission → gets ASK (default)
         verdict = engine.check("shell", "execute", "rm -rf /", [])
-        assert verdict.decision == "deny"
+        assert verdict.decision == "ask"
 
         # Agent tries to approve without challenge → rejected
         with pytest.raises(ValueError, match="challenge"):
@@ -193,6 +193,6 @@ class TestChallengeInEngine:
                 decided_by="user",
             )
 
-        # Still denied
+        # Still ASK (not auto-approved)
         verdict2 = engine.check("shell", "execute", "rm -rf /", [])
-        assert verdict2.decision == "deny"
+        assert verdict2.decision == "ask"

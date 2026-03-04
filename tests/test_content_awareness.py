@@ -74,8 +74,8 @@ class TestContentHashCacheKey:
             permissions=[],
             session_id="s1", content_hash="hash2",
         )
-        # Without matching cache or learned/static rules, default is deny
-        assert verdict.decision == PermissionDecision.DENY
+        # Without matching cache or learned/static rules, default is ask
+        assert verdict.decision == PermissionDecision.ASK
 
     def test_empty_hash_matches_empty_hash(self):
         """Empty content_hash matches cache entry with empty hash."""
@@ -192,4 +192,4 @@ class TestContentHashInAPI:
         })
         assert resp.status_code == 200
         data = resp.json()
-        assert data["decision"] in ("allow", "deny")
+        assert data["decision"] in ("allow", "deny", "ask")

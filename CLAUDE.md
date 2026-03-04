@@ -156,7 +156,7 @@ aiperture/
 2. **HMAC challenge-response** — Every non-ALLOW verdict includes a cryptographic challenge token (HMAC-SHA256 signed with a server-side secret in `challenge.py`). `approve_action`/`deny_action` require a valid challenge, preventing agents from self-approving without human involvement.
 3. **No config mutation via MCP** — The `update_config` MCP tool was removed. Agents can read config (`get_config`) but cannot lower thresholds. Config changes require the CLI wizard or HTTP API.
 4. **Deep risk analysis** — `risk.py` unpacks shell wrappers (`bash -c`, `sudo`), pipe-to-exec (`curl | sh`), scripting oneliners (`python -c "os.system(...)"`), and `find -exec`. Inner command risk is what counts. Recursion depth is capped at 5 levels to prevent DoS. HIGH/CRITICAL actions are never auto-approved.
-5. **Fail-closed circuit breaker** — If the database becomes unavailable during a permission check, the engine fails closed (defaults to deny). The `GET /health` endpoint probes database connectivity.
+5. **Fail-closed circuit breaker** — If the database becomes unavailable during a permission check, the engine fails closed (falls through to default decision). The default decision is ASK (configurable to DENY via `AIPERTURE_DEFAULT_DECISION`). The `GET /health` endpoint probes database connectivity.
 6. **Compliance tracking** — `report_tool_execution` records tool executions. `get_compliance_report` compares executions against permission checks to find unchecked tool usage.
 7. **Bootstrap presets** — `presets.py` provides `developer` (75 patterns), `readonly` (48), `minimal` (0) to reduce first-session approval fatigue.
 8. **Content awareness** — `content_hash` parameter in `check_permission` differentiates writes by content. Session cache key is a 5-tuple: `(tool, action, scope, session_id, content_hash)`.
@@ -200,6 +200,7 @@ Run `aiperture configure` for an interactive setup wizard, or use `PATCH /config
 | `AIPERTURE_PERMISSION_LEARNING_MIN_DECISIONS` | `10` | Yes | Min decisions before auto-deciding |
 | `AIPERTURE_AUTO_APPROVE_THRESHOLD` | `0.95` | Yes | Approval rate to auto-approve |
 | `AIPERTURE_AUTO_DENY_THRESHOLD` | `0.05` | Yes | Approval rate to auto-deny |
+| `AIPERTURE_DEFAULT_DECISION` | `ask` | Yes | Fallback when no rule or learned pattern matches: `ask` or `deny` |
 | `AIPERTURE_INTELLIGENCE_ENABLED` | `false` | Yes | Enable cross-org DP intelligence (opt-in) |
 | `AIPERTURE_INTELLIGENCE_EPSILON` | `1.0` | Yes | DP noise level (higher = less private) |
 | `AIPERTURE_INTELLIGENCE_MIN_ORGS` | `5` | Yes | Min orgs before surfacing global signal |

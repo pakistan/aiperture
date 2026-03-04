@@ -27,11 +27,11 @@ class TestMetricsInstrumentation:
     def test_check_increments_counter(self):
         """Each permission check should increment the total counter."""
         engine = PermissionEngine()
-        before = PERMISSION_CHECKS.labels(decision="deny", decided_by="static_rule")._value.get()
+        before = PERMISSION_CHECKS.labels(decision="ask", decided_by="default")._value.get()
 
         engine.check("filesystem", "read", "test.py", [])
 
-        after = PERMISSION_CHECKS.labels(decision="deny", decided_by="static_rule")._value.get()
+        after = PERMISSION_CHECKS.labels(decision="ask", decided_by="default")._value.get()
         assert after > before
 
     def test_allow_decision_tracked(self):

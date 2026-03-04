@@ -49,18 +49,18 @@ class TestPermissionAPI:
         assert "risk" in data
         assert data["risk"]["tier"] in ("low", "medium", "high", "critical")
 
-    def test_check_with_deny(self):
+    def test_check_with_no_rules_asks(self):
         app = create_app()
         client = TestClient(app)
         resp = client.post("/permissions/check", json={
             "tool": "shell",
             "action": "execute",
             "scope": "rm -rf /",
-            "permissions": [],  # no rules = deny
+            "permissions": [],  # no rules = default (ask)
         })
         assert resp.status_code == 200
         data = resp.json()
-        assert data["decision"] == "deny"
+        assert data["decision"] == "ask"
         assert data["risk"]["tier"] == "critical"
 
     def test_check_enriched(self):

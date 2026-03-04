@@ -34,8 +34,8 @@ class TestEngineCircuitBreaker:
 
         assert result is None
 
-    def test_full_check_denies_on_db_failure_no_static_rules(self):
-        """Full check() with no static rules returns deny when DB is down."""
+    def test_full_check_asks_on_db_failure_no_static_rules(self):
+        """Full check() with no static rules returns ask (default) when DB is down."""
         engine = PermissionEngine()
 
         with patch("aiperture.permissions.engine.get_engine") as mock_get_engine:
@@ -45,7 +45,7 @@ class TestEngineCircuitBreaker:
                 task_id="task-1",
             )
 
-        assert verdict.decision == "deny"
+        assert verdict.decision == "ask"
 
     def test_full_check_falls_through_to_static_on_db_failure(self):
         """When DB is down, check() still evaluates static rules after learned/ReBAC fail."""
@@ -77,7 +77,7 @@ class TestEngineCircuitBreaker:
                 task_id="task-1",
             )
 
-        assert verdict.decision == "deny"
+        assert verdict.decision == "ask"
 
     def test_db_failure_logs_warning_for_learned(self):
         """_check_learned logs a WARNING on database failure."""

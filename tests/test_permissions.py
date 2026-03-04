@@ -24,17 +24,18 @@ class TestStaticPermissions:
         verdict = engine.check("shell", "execute", "ls", rules)
         assert verdict.decision == "allow"
 
-    def test_no_match_denies(self):
+    def test_no_match_asks(self):
         engine = PermissionEngine()
         rules = [Permission(tool="shell", action="execute", scope="ls", decision=PermissionDecision.ALLOW)]
         verdict = engine.check("shell", "execute", "rm -rf /", rules)
-        assert verdict.decision == "deny"
+        assert verdict.decision == "ask"
+        assert verdict.decided_by == "default"
 
     def test_glob_match(self):
         engine = PermissionEngine()
         rules = [Permission(tool="filesystem", action="read", scope="src/*.py", decision=PermissionDecision.ALLOW)]
         assert engine.check("filesystem", "read", "src/main.py", rules).decision == "allow"
-        assert engine.check("filesystem", "read", "etc/passwd", rules).decision == "deny"
+        assert engine.check("filesystem", "read", "etc/passwd", rules).decision == "ask"
 
     def test_specificity_wins(self):
         engine = PermissionEngine()
@@ -49,6 +50,20 @@ class TestStaticPermissions:
         engine = PermissionEngine()
         rules = [Permission(tool="api", action="*", scope="*", decision=PermissionDecision.ASK)]
         assert engine.check("api", "post", "users/delete", rules).decision == "ask"
+
+    def test_default_decision_deny_setting(self):
+        """When default_decision is set to 'deny', no-match falls back to DENY."""
+        import aiperture.config
+        original = aiperture.config.settings.default_decision
+        try:
+            object.__setattr__(aiperture.config.settings, "default_decision", "deny")
+            engine = PermissionEngine()
+            rules = [Permission(tool="shell", action="execute", scope="ls", decision=PermissionDecision.ALLOW)]
+            verdict = engine.check("shell", "execute", "rm -rf /", rules)
+            assert verdict.decision == "deny"
+            assert verdict.decided_by == "default"
+        finally:
+            object.__setattr__(aiperture.config.settings, "default_decision", original)
 
 
 class TestTaskPermissions:
@@ -132,9 +147,9 @@ class TestPermissionLearning:
                 **_make_challenge("shell", "execute", "test.sh"),
             )
 
-        # Falls through to static rules (empty = deny)
+        # Falls through to default decision (ask)
         verdict = engine.check("shell", "execute", "test.sh", [])
-        assert verdict.decision == "deny"
+        assert verdict.decision == "ask"
 
     def test_high_risk_actions_never_auto_approved(self):
         """HIGH/CRITICAL risk actions must always require human approval, even with strong history."""
@@ -156,10 +171,11 @@ class TestPermissionLearning:
             )
 
         # Despite 20 approvals at 100% rate, this should NOT be auto-approved
-        # because shell.execute on "rm -rf ./build/" is HIGH risk
+        # because shell.execute on "rm -rf ./build/" is HIGH risk.
+        # Falls through to default decision (ask).
         verdict = engine.check("shell", "execute", "rm -rf ./build/", [])
-        assert verdict.decision == "deny", (
-            f"HIGH risk action was auto-approved — expected deny, got {verdict.decision}"
+        assert verdict.decision == "ask", (
+            f"HIGH risk action was auto-approved — expected ask, got {verdict.decision}"
         )
 
     def test_learner_detects_patterns(self):

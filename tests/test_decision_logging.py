@@ -57,13 +57,14 @@ class TestDecisionLogging:
 class TestDecisionLoggingIntegration:
     """Verify that check() produces log output."""
 
-    def test_static_deny_logs_warning(self, caplog):
+    def test_no_match_default_logs_info(self, caplog):
+        """When no static rule matches, the default ASK decision logs at INFO."""
         engine = PermissionEngine()
         rules = [Permission(tool="shell", action="execute", scope="ls", decision=PermissionDecision.ALLOW)]
-        with caplog.at_level(logging.WARNING, logger="aiperture.permissions.engine"):
+        with caplog.at_level(logging.INFO, logger="aiperture.permissions.engine"):
             engine.check("shell", "execute", "rm -rf /", rules)
         assert any(
-            r.levelno == logging.WARNING and "DENY" in r.message
+            r.levelno == logging.INFO and "ASK" in r.message
             for r in caplog.records
         )
 
