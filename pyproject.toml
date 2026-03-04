@@ -1,6 +1,6 @@
 [project]
 name = "aiperture"
-version = "0.2.0"
+version = "0.3.0"
 description = "The permission layer for AI agents. Controls what passes through."
 readme = "README.md"
 license = "Apache-2.0"
@@ -27,13 +27,14 @@ dependencies = [
     "pydantic>=2.10.0",
     "pydantic-settings>=2.6.0",
     "mcp>=1.2.0",
+    "prometheus_client>=0.20.0",
 ]
 
 [project.urls]
-Homepage = "https://github.com/adnanzaib/aiperture"
-Repository = "https://github.com/adnanzaib/aiperture"
-Issues = "https://github.com/adnanzaib/aiperture/issues"
-Documentation = "https://github.com/adnanzaib/aiperture#readme"
+Homepage = "https://github.com/pakistan/aiperture"
+Repository = "https://github.com/pakistan/aiperture"
+Issues = "https://github.com/pakistan/aiperture/issues"
+Documentation = "https://github.com/pakistan/aiperture#readme"
 
 [project.scripts]
 aiperture = "aiperture.cli:main"
