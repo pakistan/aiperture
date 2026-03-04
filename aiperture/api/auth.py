@@ -12,6 +12,8 @@ into the FastAPI application.
 
 from __future__ import annotations
 
+import hmac
+
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
@@ -39,7 +41,7 @@ async def require_api_key(
         # No key configured — open access (local dev mode).
         return
 
-    if credentials is None or credentials.credentials != configured_key:
+    if credentials is None or not hmac.compare_digest(credentials.credentials, configured_key):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or missing API key",

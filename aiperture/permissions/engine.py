@@ -926,7 +926,12 @@ class PermissionEngine:
         if not logs:
             return None
 
-        # Exclude rubber-stamped decisions (`:rapid` suffix)
+        # Exclude rubber-stamped decisions (`:rapid` suffix).
+        # Note: fnmatch.fnmatch(scope, log.scope) checks if the current scope
+        # matches the stored log scope AS A PATTERN.  This is intentional —
+        # stored scopes may contain normalized wildcards (e.g. "git log*")
+        # produced by scope_normalize.py, and the current scope (e.g.
+        # "git log --oneline -5") should match against those patterns.
         matching = [
             log for log in logs
             if fnmatch.fnmatch(scope, log.scope) and not log.decided_by.endswith(":rapid")
@@ -1012,3 +1017,19 @@ class PermissionEngine:
         except Exception:
             logger.error("Failed to log permission decision for %s.%s", tool, action, exc_info=True)
         return log_entry
+
+
+_shared_engine: PermissionEngine | None = None
+
+
+def get_shared_engine() -> PermissionEngine:
+    """Return a module-level singleton PermissionEngine.
+
+    All consumers (API routes, hooks, MCP server) should use this
+    instead of creating their own instances, so that session caches,
+    rate limiters, and risk budgets are shared.
+    """
+    global _shared_engine
+    if _shared_engine is None:
+        _shared_engine = PermissionEngine()
+    return _shared_engine

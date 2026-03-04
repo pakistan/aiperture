@@ -28,7 +28,7 @@ from mcp.server.fastmcp.exceptions import ToolError
 
 from aiperture import plugins
 from aiperture.db import init_db
-from aiperture.permissions.engine import PermissionEngine
+from aiperture.permissions.engine import get_shared_engine
 from aiperture.permissions.learning import PermissionLearner
 from aiperture.stores.artifact_store import ArtifactStore
 from aiperture.stores.audit_store import AuditStore
@@ -65,7 +65,7 @@ mcp = FastMCP(
 )
 
 # Shared instances
-_engine = PermissionEngine()
+_engine = get_shared_engine()
 _learner = PermissionLearner()
 _artifacts = ArtifactStore()
 _audit = AuditStore()
@@ -378,7 +378,7 @@ def get_audit_trail(
 def get_config() -> str:
     """Get current Aperture configuration (tunable settings only).
 
-    Returns the 7 tunable settings with their current values and descriptions.
+    Returns the 14 tunable settings with their current values and descriptions.
     Infrastructure settings (db_path, api_host, etc.) are not exposed.
     """
     import aiperture.config
@@ -434,11 +434,6 @@ def _compute_compliance(session_id: str, organization_id: str) -> dict:
     # Build sets of (tool, action, scope) for each
     checked_keys = set()
     for e in checks:
-        if e.details and "tool" not in e.details:
-            # check_permission stores the full verdict in details; extract tool/action/scope
-            d = e.details
-            # The entity_id format is "tool.action.scope"
-            pass
         if e.details:
             t = e.details.get("tool", "")
             a = e.details.get("action", "")

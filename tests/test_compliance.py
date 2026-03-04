@@ -183,7 +183,8 @@ class TestComplianceReport:
 class TestComplianceConfig:
     """Compliance tracking config flag."""
 
-    def test_compliance_tracking_enabled_default(self):
-        """compliance_tracking_enabled defaults to True."""
+    def test_compliance_settings_exist(self):
+        """Core compliance settings exist."""
         import aiperture.config
-        assert aiperture.config.settings.compliance_tracking_enabled is True
+        # compliance_tracking_enabled was removed (unused dead config)
+        assert hasattr(aiperture.config.settings, "permission_learning_enabled")

@@ -49,9 +49,6 @@ class Settings(BaseSettings):
     rate_limit_per_minute: int = 200  # max permission checks per session per minute
     session_risk_budget: float = 50.0  # cumulative risk budget per session
 
-    # Compliance
-    compliance_tracking_enabled: bool = True  # track checked vs unchecked tool executions
-
     # Artifacts
     artifact_storage_dir: str = ""
 

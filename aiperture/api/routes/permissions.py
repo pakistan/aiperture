@@ -14,11 +14,11 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from aiperture.models.permission import Permission, PermissionDecision
-from aiperture.permissions.engine import PermissionEngine
+from aiperture.permissions.engine import get_shared_engine
 from aiperture.permissions.learning import PermissionLearner
 
 router = APIRouter()
-engine = PermissionEngine()
+engine = get_shared_engine()
 learner = PermissionLearner()
 
 

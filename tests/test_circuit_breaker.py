@@ -145,4 +145,4 @@ class TestHealthEndpoint:
 
         data = resp.json()
         assert data["service"] == "aiperture"
-        assert data["version"] == "0.2.0"
+        assert "version" in data  # dynamic from importlib.metadata

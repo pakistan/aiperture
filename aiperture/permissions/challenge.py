@@ -42,7 +42,7 @@ DEFAULT_MAX_AGE_SECONDS = 3600.0
 
 # Single-use nonce tracking: set of consumed nonces with their expiry times
 _consumed_nonces: dict[str, float] = {}
-_nonce_lock = threading.Lock()
+_nonce_lock = threading.RLock()
 
 # Prune consumed nonces older than this (matches max token age)
 _NONCE_PRUNE_INTERVAL = DEFAULT_MAX_AGE_SECONDS
@@ -111,26 +111,27 @@ def verify_challenge(
     if now - issued_at > max_age_seconds:
         return False
 
-    # Check if nonce was already consumed (replay protection)
-    # First check in-memory cache, then fall back to database
+    # Hold the lock across the entire verify-and-consume operation to
+    # prevent TOCTOU races between the nonce check and consumption.
     with _nonce_lock:
+        # Check if nonce was already consumed (replay protection)
+        # First check in-memory cache
         if nonce in _consumed_nonces:
             return False
-    if _check_nonce_in_db(nonce):
-        return False
 
-    # Recompute HMAC (includes org and session binding)
-    message = f"{tool}|{action}|{scope}|{organization_id}|{session_id}|{nonce}|{issued_at}".encode()
-    expected = hmac.new(_SERVER_SECRET, message, hashlib.sha256).hexdigest()
-
-    if not hmac.compare_digest(token, expected):
-        return False
-
-    # Mark nonce as consumed (single-use)
-    with _nonce_lock:
-        # Double-check after acquiring lock
-        if nonce in _consumed_nonces:
+        # Fall back to database check (still under lock)
+        if _check_nonce_in_db(nonce):
             return False
+
+        # Recompute HMAC (includes org and session binding)
+        # HMAC computation is fast enough to hold the lock.
+        message = f"{tool}|{action}|{scope}|{organization_id}|{session_id}|{nonce}|{issued_at}".encode()
+        expected = hmac.new(_SERVER_SECRET, message, hashlib.sha256).hexdigest()
+
+        if not hmac.compare_digest(token, expected):
+            return False
+
+        # Mark nonce as consumed (single-use) — atomically with the check
         _consumed_nonces[nonce] = now
         _prune_expired_nonces(now)
 

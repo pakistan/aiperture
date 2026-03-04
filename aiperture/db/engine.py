@@ -3,7 +3,7 @@
 import logging
 
 from sqlalchemy import event
-from sqlmodel import Session, SQLModel, create_engine
+from sqlmodel import SQLModel, create_engine
 
 import aiperture.config
 from aiperture import plugins
@@ -52,11 +52,6 @@ def get_engine():
             cursor.close()
 
     return _engine
-
-
-def get_session() -> Session:
-    """Create a new database session."""
-    return Session(get_engine())
 
 
 def init_db():

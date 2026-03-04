@@ -1,6 +1,8 @@
 """Health check endpoint — database connectivity probe."""
 
 import logging
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as pkg_version
 
 from fastapi import APIRouter
 from sqlalchemy import text
@@ -8,6 +10,11 @@ from sqlmodel import Session
 
 from aiperture import plugins
 from aiperture.db import get_engine
+
+try:
+    _VERSION = pkg_version("aiperture")
+except PackageNotFoundError:
+    _VERSION = "unknown"
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +34,7 @@ def health_check():
     """
     result = {
         "service": "aiperture",
-        "version": "0.2.0",
+        "version": _VERSION,
     }
 
     try:

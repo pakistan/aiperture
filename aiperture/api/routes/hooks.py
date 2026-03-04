@@ -18,6 +18,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import threading
 from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks
@@ -27,20 +28,21 @@ from aiperture.hooks.pending_tracker import PendingRequest, PendingTracker
 from aiperture.hooks.tool_mapping import map_tool
 from aiperture.models.permission import PermissionDecision
 from aiperture.models.verdict import RiskTier
-from aiperture.permissions.engine import PermissionEngine
+from aiperture.permissions.engine import get_shared_engine
 from aiperture.permissions.risk import classify_risk
 from aiperture.stores.audit_store import AuditStore
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-engine = PermissionEngine()
+engine = get_shared_engine()
 audit = AuditStore()
 pending = PendingTracker()
 
 # Track auto-approved tool calls so PostToolUse doesn't double-count them.
 # Key: _pending_key(session_id, tool_name, tool_input), Value: True
 _auto_approved: set[str] = set()
+_auto_approved_lock = threading.Lock()
 _MAX_AUTO_APPROVED = 10_000
 
 
@@ -147,7 +149,9 @@ def handle_permission_request(payload: PermissionRequestPayload):
                      "decided_by": verdict.decided_by},
         )
         # Track so PostToolUse doesn't double-count this as a human approval
-        if len(_auto_approved) < _MAX_AUTO_APPROVED:
+        with _auto_approved_lock:
+            if len(_auto_approved) >= _MAX_AUTO_APPROVED:
+                _auto_approved.clear()
             _auto_approved.add(pkey)
         return {
             "hookSpecificOutput": {
@@ -227,9 +231,10 @@ def handle_post_tool_use(
     pending.resolve(pkey)
 
     # Skip recording if this was auto-approved by AIperture
-    if pkey in _auto_approved:
-        _auto_approved.discard(pkey)
-        return {"recorded": False, "reason": "auto_approved"}
+    with _auto_approved_lock:
+        if pkey in _auto_approved:
+            _auto_approved.discard(pkey)
+            return {"recorded": False, "reason": "auto_approved"}
 
     # Record implicit approval in background for speed
     background_tasks.add_task(

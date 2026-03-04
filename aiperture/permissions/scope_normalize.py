@@ -159,6 +159,13 @@ def _normalize_shell_scope(scope: str) -> str | None:
         "ls -la /home/user" -> "ls*"
         "pytest tests/test_foo.py -v" -> "pytest*"
     """
+    # Dangerous commands must not be normalized — require exact-match learning.
+    # Normalizing e.g. "rm tempfile.txt" to "rm*" would be dangerously broad.
+    _DANGEROUS_COMMANDS = frozenset({
+        "rm", "chmod", "chown", "kill", "pkill", "mv",
+        "dd", "mkfs", "fdisk", "shutdown", "reboot",
+    })
+
     try:
         parts = shlex.split(scope)
     except ValueError:
@@ -168,6 +175,9 @@ def _normalize_shell_scope(scope: str) -> str | None:
         return None
 
     cmd = parts[0].lower()
+
+    if cmd in _DANGEROUS_COMMANDS:
+        return None
 
     # Check for subcommand commands
     if cmd in _SUBCOMMAND_CMDS and len(parts) > 1:

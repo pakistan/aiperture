@@ -114,10 +114,10 @@ class TestLogLevelConfig:
 class TestLogFileConfig:
     """Verify the log_file setting and setup_file_logging()."""
 
-    def test_default_log_file_is_empty(self):
+    def test_default_log_file_path(self):
         from aiperture.config import Settings
         s = Settings()
-        assert s.log_file == ""
+        assert s.log_file == "~/.aiperture/aiperture.log"
 
     def test_setup_noop_when_empty(self):
         import aiperture.config

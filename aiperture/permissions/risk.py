@@ -9,6 +9,14 @@ import re
 
 from aiperture.models.verdict import RiskAssessment, RiskTier
 
+# ── Tier ordering (used for tier comparisons) ────────────────────────
+_TIER_ORDER: dict[RiskTier, int] = {
+    RiskTier.LOW: 0,
+    RiskTier.MEDIUM: 1,
+    RiskTier.HIGH: 2,
+    RiskTier.CRITICAL: 3,
+}
+
 # ── Danger maps ──────────────────────────────────────────────────────
 
 # Tool danger: how capable is this tool of causing harm (likelihood dimension)
@@ -402,12 +410,13 @@ def scope_breadth(scope: str) -> float:
 
 def _matches_critical_pattern(scope: str) -> bool:
     """Check if scope matches any CRITICAL override pattern."""
-    scope_stripped = scope.strip()
+    scope_stripped = scope.strip().lower()
     for pattern in CRITICAL_PATTERNS:
-        if fnmatch.fnmatch(scope_stripped, pattern):
+        pattern_lower = pattern.lower()
+        if fnmatch.fnmatch(scope_stripped, pattern_lower):
             return True
         # Also check if the scope contains the pattern
-        if pattern.rstrip("*") and pattern.rstrip("*") in scope_stripped and pattern.endswith("*"):
+        if pattern_lower.rstrip("*") and pattern_lower.rstrip("*") in scope_stripped and pattern_lower.endswith("*"):
             return True
     return False
 
@@ -487,13 +496,7 @@ def classify_risk(tool: str, action: str, scope: str, *, _depth: int = 0) -> Ris
                 reversible=False,
             )
         inner_risk = classify_risk(tool, action, inner_cmd, _depth=_depth + 1)
-        tier_order = {
-            RiskTier.LOW: 0,
-            RiskTier.MEDIUM: 1,
-            RiskTier.HIGH: 2,
-            RiskTier.CRITICAL: 3,
-        }
-        if tier_order.get(inner_risk.tier, 0) > tier_order.get(deep_tier, 0):
+        if _TIER_ORDER.get(inner_risk.tier, 0) > _TIER_ORDER.get(deep_tier, 0):
             deep_tier = inner_risk.tier
             factors.extend(f"inner:{f}" for f in inner_risk.factors if f"inner:{f}" not in factors)
 
@@ -553,13 +556,7 @@ def classify_risk(tool: str, action: str, scope: str, *, _depth: int = 0) -> Ris
 
     # 5. Deep analysis can only elevate the tier, never lower it
     if deep_tier is not None:
-        tier_order = {
-            RiskTier.LOW: 0,
-            RiskTier.MEDIUM: 1,
-            RiskTier.HIGH: 2,
-            RiskTier.CRITICAL: 3,
-        }
-        if tier_order.get(deep_tier, 0) > tier_order.get(tier, 0):
+        if _TIER_ORDER.get(deep_tier, 0) > _TIER_ORDER.get(tier, 0):
             tier = deep_tier
             if deep_tier == RiskTier.CRITICAL:
                 score = 1.0
