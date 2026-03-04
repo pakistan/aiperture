@@ -11,6 +11,13 @@ Three core capabilities:
 2. **Artifact Persistence** — SHA-256 verified, immutable audit trail of every agent output
 3. **Intelligence** — Cross-org anonymized signals with differential privacy
 
+## Testing Rules
+
+1. **All tests must pass.** Run the full suite before considering any change complete: `/Users/adnanzaib/.local/pipx/venvs/aiperture/bin/python -m pytest tests/ -q --tb=short -o "addopts="`. Zero failures required.
+2. **Fix failing tests, don't dismiss them.** If tests fail, investigate and fix the root cause. Never claim failures are "pre-existing" or "environment issues" without verifying on clean main first.
+3. **Tests must make product sense.** Every test should reflect real AIperture behavior. If changing code breaks a test, either the code change is wrong or the test needs updating to match the new correct behavior — decide which and fix accordingly.
+4. **No reward hacking.** Do not call AIperture's own MCP tools to simulate activity that should come through Claude Code hooks. The MCP tools are the read-only query layer. The hooks (PermissionRequest + PostToolUse) are the real permission learning path.
+
 ## Quick Start
 
 ```bash
@@ -227,7 +234,7 @@ Run `aiperture configure` for an interactive setup wizard, or use `PATCH /config
 | `AIPERTURE_SESSION_RISK_BUDGET` | `50.0` | Yes | Cumulative risk budget per session before escalating to ASK |
 | `AIPERTURE_HOOK_AUTO_ALLOWED_TOOLS` | `Read,Grep,Glob,WebSearch,WebFetch` | Yes | Comma-separated Claude Code tool names that are auto-allowed (skip recording in PostToolUse hooks) |
 | `AIPERTURE_LOG_LEVEL` | `DEBUG` | Yes | Logging verbosity: `DEBUG`, `INFO`, `WARNING`, `ERROR` |
-| `AIPERTURE_LOG_FILE` | `` | No | File path for log output (e.g. `~/.aiperture/aiperture.log`). RotatingFileHandler, 5 MB, 3 backups. Empty = no file logging |
+| `AIPERTURE_LOG_FILE` | `~/.aiperture/aiperture.log` | No | File path for log output. RotatingFileHandler, 5 MB, 3 backups. Set to empty string to disable file logging |
 | `AIPERTURE_ARTIFACT_STORAGE_DIR` | `` | No | Artifact file storage directory |
 | `AIPERTURE_API_KEY` | `` | No | Bearer token for HTTP API auth (empty = open access) |
 | `AIPERTURE_API_HOST` | `0.0.0.0` | No | API server bind host |

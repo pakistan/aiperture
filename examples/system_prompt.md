@@ -35,28 +35,12 @@ check_permission(tool="filesystem", action="read", scope="README.md")
 ### Handling the Verdict
 
 - **"allow"**: Proceed with the tool call.
-- **"deny"**: Do NOT proceed. Tell the user the action was denied and ask if they want to approve it.
+- **"deny"**: Do NOT proceed. Tell the user the action was denied and why.
 - **"ask"**: Do NOT proceed. Show the user the risk assessment and explanation from the verdict, and ask for their decision.
 
-### When the User Approves
+### When the User Approves or Denies
 
-If the user says "yes", "approve", "allow", or otherwise grants permission, call `approve_action`:
-
-```
-approve_action(tool="filesystem", action="read", scope="README.md", decided_by="user")
-```
-
-Then proceed with the tool call.
-
-### When the User Denies
-
-If the user says "no", "deny", or "reject", call `deny_action`:
-
-```
-deny_action(tool="filesystem", action="read", scope="README.md", decided_by="user")
-```
-
-Do NOT proceed with the tool call.
+When the verdict is "ask" and the user makes a decision, their choice is recorded automatically through the runtime's permission dialog (e.g., Claude Code's native permission prompt). You do not need to call any additional tools — the hook integration handles learning from human decisions.
 
 ## Learning Loop
 

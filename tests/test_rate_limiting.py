@@ -18,7 +18,7 @@ class TestRateLimiting:
                 "filesystem", "read", "src/main.py", [],
                 session_id="sess1", organization_id="org1",
             )
-            assert verdict.decision != PermissionDecision.ALLOW or verdict.decided_by != "rate_limit"
+            assert verdict.decided_by != "rate_limit"
 
     def test_over_limit_denied(self):
         """Checks over the rate limit should be denied."""

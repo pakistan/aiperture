@@ -115,7 +115,10 @@ class TestCLIInitDB:
         inspector = inspect(get_engine())
         table_names = inspector.get_table_names()
         # At minimum, these core tables should exist
-        assert "permission" in table_names or "permissionlog" in table_names or len(table_names) > 0
+        expected_tables = {"permission_logs", "artifacts", "audit_events", "consumed_nonces"}
+        assert expected_tables.issubset({t.lower() for t in table_names}), (
+            f"Missing tables: {expected_tables - {t.lower() for t in table_names}}"
+        )
 
 
 class TestCLIServe:

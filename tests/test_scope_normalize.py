@@ -90,6 +90,50 @@ class TestNormalizeFilesystemScope:
         assert normalize_scope("fs", "read", "src/main.py") == "src/*.py"
 
 
+class TestDangerousCommandsSkipNormalization:
+    """Dangerous commands (rm, chmod, etc.) must not normalize — exact-match learning only."""
+
+    def test_rm_approvals_do_not_auto_approve_rm_rf(self):
+        """Approving 'rm ./temp.txt' N times must NOT auto-approve 'rm -rf /'.
+
+        Dangerous commands skip scope normalization, so each exact command
+        requires its own learning history. This prevents privilege escalation
+        through the learning engine.
+        """
+        import aiperture.config
+        from aiperture.models.permission import PermissionDecision
+        from aiperture.permissions.engine import PermissionEngine
+
+        engine = PermissionEngine()
+        original_min = aiperture.config.settings.permission_learning_min_decisions
+        object.__setattr__(aiperture.config.settings, "permission_learning_min_decisions", 3)
+
+        try:
+            # Record 5 approvals for 'rm ./temp.txt'
+            for i in range(5):
+                engine.record_hook_decision(
+                    tool="shell", action="execute", scope="rm ./temp.txt",
+                    decision=PermissionDecision.ALLOW,
+                    session_id=f"danger-test-{i}",
+                    organization_id="danger-org",
+                )
+
+            # Check 'rm -rf /' — must NOT be auto-approved
+            verdict = engine.check(
+                "shell", "execute", "rm -rf /", [],
+                organization_id="danger-org",
+            )
+            assert verdict.decision != PermissionDecision.ALLOW or verdict.decided_by == "static_rule", (
+                f"rm -rf / should not be auto-approved! Got: decision={verdict.decision}, decided_by={verdict.decided_by}"
+            )
+        finally:
+            object.__setattr__(
+                aiperture.config.settings,
+                "permission_learning_min_decisions",
+                original_min,
+            )
+
+
 class TestNormalizeEdgeCases:
     """Edge cases and non-normalizable scopes."""
 

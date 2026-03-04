@@ -83,14 +83,15 @@ class TestOpenClawConfig:
         assert float(env["AIPERTURE_AUTO_APPROVE_THRESHOLD"]) <= 0.90
 
     def test_system_prompt_exists(self):
-        """The system prompt file exists and mentions key AIperture tools."""
+        """The system prompt file exists, mentions check_permission, and does NOT reference removed tools."""
         prompt_path = EXAMPLES_DIR / "system_prompt.md"
         assert prompt_path.exists(), f"Missing {prompt_path}"
         text = prompt_path.read_text()
         assert "check_permission" in text
-        assert "approve_action" in text
-        assert "deny_action" in text
         assert "get_permission_patterns" in text
+        # approve_action and deny_action are NOT MCP tools (agent self-approval vulnerability)
+        assert "approve_action" not in text
+        assert "deny_action" not in text
 
     def test_setup_script_exists_and_executable(self):
         """The setup script exists."""

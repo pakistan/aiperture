@@ -22,6 +22,7 @@ from aiperture.mcp_server import (
     get_config,
     get_cost_summary,
     get_permission_patterns,
+    list_auto_approved_patterns,
     store_artifact,
     verify_artifact,
 )
@@ -32,20 +33,6 @@ from aiperture.mcp_server import (
 
 class TestMCPToolsImportable:
     """Wiring: all MCP tools are importable from aiperture.mcp_server."""
-
-    def test_all_tools_importable(self):
-        """Every MCP tool function is importable from the public module."""
-        for fn in (
-            check_permission,
-            explain_action,
-            get_permission_patterns,
-            store_artifact,
-            verify_artifact,
-            get_cost_summary,
-            get_audit_trail,
-            get_config,
-        ):
-            assert callable(fn), f"{fn.__name__} is not callable"
 
     def test_update_config_not_exposed(self):
         """update_config is NOT an MCP tool — config changes only via CLI/REST."""
@@ -297,6 +284,60 @@ class TestGetPermissionPatterns:
         """Patterns are org-scoped."""
         result = get_permission_patterns(organization_id="nonexistent-org")
         assert "No permission patterns" in result
+
+
+# ---- store_artifact ------------------------------------------------------
+
+
+# ---- list_auto_approved_patterns -------------------------------------------
+
+
+class TestListAutoApprovedPatterns:
+    """list_auto_approved_patterns returns auto-approved patterns or a message."""
+
+    def test_no_auto_approved_patterns(self):
+        """When no patterns are auto-approved, returns informational text."""
+        result = list_auto_approved_patterns()
+        assert "No auto-approved" in result or "auto-approved" in result.lower()
+
+    def test_auto_approved_patterns_after_learning(self):
+        """After enough approvals, the pattern appears in auto-approved list."""
+        import aiperture.config
+        from aiperture.mcp_server import _engine
+        from aiperture.models.permission import PermissionDecision
+        from aiperture.permissions.challenge import create_challenge
+
+        original_min = aiperture.config.settings.permission_learning_min_decisions
+        aiperture.config.settings.permission_learning_enabled = True
+        object.__setattr__(aiperture.config.settings, "permission_learning_min_decisions", 5)
+
+        try:
+            # Record 10 human approvals for a low-risk pattern
+            for i in range(10):
+                ch = create_challenge("filesystem", "read", "src/*.py", organization_id="default")
+                _engine.record_human_decision(
+                    tool="filesystem",
+                    action="read",
+                    scope="src/*.py",
+                    decision=PermissionDecision.ALLOW,
+                    decided_by=f"user-{i % 3}",
+                    organization_id="default",
+                    challenge=ch.token,
+                    challenge_nonce=ch.nonce,
+                    challenge_issued_at=ch.issued_at,
+                )
+
+            result = json.loads(list_auto_approved_patterns(min_decisions=5))
+            assert result["count"] >= 1
+            pattern = result["patterns"][0]
+            assert pattern["tool"] == "filesystem"
+            assert pattern["action"] == "read"
+        finally:
+            object.__setattr__(
+                aiperture.config.settings,
+                "permission_learning_min_decisions",
+                original_min,
+            )
 
 
 # ---- store_artifact ------------------------------------------------------

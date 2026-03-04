@@ -7,53 +7,6 @@ from aiperture.models import Permission, PermissionDecision
 from aiperture.permissions import PermissionEngine
 
 
-class TestDecisionLogging:
-    """Verify _log_decision logs at correct levels."""
-
-    def test_deny_logs_at_warning(self, caplog):
-        engine = PermissionEngine()
-        with caplog.at_level(logging.DEBUG, logger="aiperture.permissions.engine"):
-            engine._log_decision(
-                PermissionDecision.DENY, "filesystem", "read", "secret.txt", "static_rule",
-            )
-        assert any(
-            r.levelno == logging.WARNING and "DENY" in r.message and "filesystem/read" in r.message
-            for r in caplog.records
-        )
-
-    def test_ask_logs_at_info(self, caplog):
-        engine = PermissionEngine()
-        with caplog.at_level(logging.DEBUG, logger="aiperture.permissions.engine"):
-            engine._log_decision(
-                PermissionDecision.ASK, "shell", "execute", "git status", "auto_learned",
-            )
-        assert any(
-            r.levelno == logging.INFO and "ASK" in r.message and "shell/execute" in r.message
-            for r in caplog.records
-        )
-
-    def test_allow_logs_at_debug(self, caplog):
-        engine = PermissionEngine()
-        with caplog.at_level(logging.DEBUG, logger="aiperture.permissions.engine"):
-            engine._log_decision(
-                PermissionDecision.ALLOW, "filesystem", "read", "README.md", "auto_learned",
-            )
-        assert any(
-            r.levelno == logging.DEBUG and "ALLOW" in r.message and "filesystem/read" in r.message
-            for r in caplog.records
-        )
-
-    def test_deny_includes_scope_and_decided_by(self, caplog):
-        engine = PermissionEngine()
-        with caplog.at_level(logging.DEBUG, logger="aiperture.permissions.engine"):
-            engine._log_decision(
-                PermissionDecision.DENY, "shell", "execute", "rm -rf /", "static_rule",
-            )
-        record = [r for r in caplog.records if "DENY" in r.message][0]
-        assert "rm -rf /" in record.message
-        assert "static_rule" in record.message
-
-
 class TestDecisionLoggingIntegration:
     """Verify that check() produces log output."""
 

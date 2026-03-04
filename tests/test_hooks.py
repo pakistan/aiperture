@@ -169,8 +169,15 @@ class TestHookEndpoints:
         assert resp.json() == {}
 
     def test_post_tool_use_records_approval(self):
-        """PostToolUse should record an implicit approval for non-auto-allowed tools."""
+        """PostToolUse should record an implicit approval only when PermissionRequest was seen."""
         client = self._client()
+        # First, send PermissionRequest to create a pending entry
+        client.post("/hooks/permission-request", json={
+            "tool_name": "Bash",
+            "tool_input": {"command": "npm test"},
+            "session_id": "test-session",
+        })
+        # Then PostToolUse — should record because PermissionRequest was seen
         resp = client.post("/hooks/post-tool-use", json={
             "tool_name": "Bash",
             "tool_input": {"command": "npm test"},
@@ -179,6 +186,19 @@ class TestHookEndpoints:
         })
         assert resp.status_code == 200
         assert resp.json()["recorded"] is True
+
+    def test_post_tool_use_no_permission_prompt(self):
+        """PostToolUse should NOT record when no PermissionRequest was seen (Claude Code auto-allowed)."""
+        client = self._client()
+        resp = client.post("/hooks/post-tool-use", json={
+            "tool_name": "Bash",
+            "tool_input": {"command": "npm test"},
+            "tool_use_id": "tu_3",
+            "session_id": "test-session",
+        })
+        assert resp.status_code == 200
+        assert resp.json()["recorded"] is False
+        assert resp.json()["reason"] == "no_permission_prompt"
 
     def test_post_tool_use_aiperture_skipped(self):
         """AIperture's own MCP tools should not be recorded."""
@@ -229,10 +249,10 @@ class TestHookEndpoints:
         object.__setattr__(aiperture.config.settings, "permission_learning_min_decisions", 3)
 
         try:
-            # Seed 3 approvals for a low-risk action
+            # Seed 3 approvals for a low-risk write action (not in auto-allowed list)
             for i in range(3):
                 engine.record_hook_decision(
-                    tool="filesystem", action="read", scope="src/*.py",
+                    tool="filesystem", action="write", scope="src/*.py",
                     decision=PermissionDecision.ALLOW,
                     session_id=f"learn-{i}",
                     organization_id="default",
@@ -240,8 +260,8 @@ class TestHookEndpoints:
 
             # Now the pattern should be auto-approved with hookSpecificOutput wrapper
             resp = client.post("/hooks/permission-request", json={
-                "tool_name": "Read",
-                "tool_input": {"file_path": "src/main.py"},
+                "tool_name": "Edit",
+                "tool_input": {"file_path": "src/main.py", "old_string": "x", "new_string": "y"},
                 "session_id": "test-auto-approve",
             })
             assert resp.status_code == 200
@@ -314,11 +334,47 @@ class TestHookEndpoints:
         assert resp.status_code == 200
 
 
+    def test_mismatched_tool_input_not_recorded(self):
+        """PostToolUse with different tool_input than PermissionRequest should NOT record.
+
+        If PermissionRequest was for 'npm test' but PostToolUse has 'different command',
+        the pending key won't match, so it should not be recorded as an approval.
+        """
+        client = self._client()
+        # PermissionRequest for "npm test"
+        client.post("/hooks/permission-request", json={
+            "tool_name": "Bash",
+            "tool_input": {"command": "npm test"},
+            "session_id": "mismatch-session",
+        })
+        # PostToolUse for a DIFFERENT command
+        resp = client.post("/hooks/post-tool-use", json={
+            "tool_name": "Bash",
+            "tool_input": {"command": "different command"},
+            "tool_use_id": "tu_mismatch",
+            "session_id": "mismatch-session",
+        })
+        assert resp.status_code == 200
+        assert resp.json()["recorded"] is False
+        assert resp.json()["reason"] == "no_permission_prompt"
+
+
 class TestHookAutoAllowedTools:
 
     def _client(self):
         app = create_app()
         return TestClient(app)
+
+    def test_permission_request_skips_auto_allowed_tools(self):
+        """PermissionRequest with auto-allowed tools (Read, Grep, etc.) returns {} immediately."""
+        client = self._client()
+        resp = client.post("/hooks/permission-request", json={
+            "tool_name": "Read",
+            "tool_input": {"file_path": "/src/main.py"},
+            "session_id": "test-auto-allowed-pr",
+        })
+        assert resp.status_code == 200
+        assert resp.json() == {}
 
     def test_read_tool_skipped_by_default(self):
         """PostToolUse with Read (default auto-allowed) returns hook_auto_allowed."""
@@ -334,8 +390,14 @@ class TestHookAutoAllowedTools:
         assert resp.json()["reason"] == "hook_auto_allowed"
 
     def test_bash_tool_still_recorded(self):
-        """PostToolUse with Bash (not auto-allowed) still records normally."""
+        """PostToolUse with Bash (not auto-allowed) records when PermissionRequest was seen."""
         client = self._client()
+        # PermissionRequest first — creates pending entry
+        client.post("/hooks/permission-request", json={
+            "tool_name": "Bash",
+            "tool_input": {"command": "echo hello"},
+            "session_id": "test-auto-allowed",
+        })
         resp = client.post("/hooks/post-tool-use", json={
             "tool_name": "Bash",
             "tool_input": {"command": "echo hello"},
@@ -346,12 +408,18 @@ class TestHookAutoAllowedTools:
         assert resp.json()["recorded"] is True
 
     def test_empty_allowlist_records_everything(self):
-        """With empty allowlist, all tools get recorded."""
+        """With empty allowlist, all tools get recorded when PermissionRequest was seen."""
         import aiperture.config
         original = aiperture.config.settings.hook_auto_allowed_tools
         object.__setattr__(aiperture.config.settings, "hook_auto_allowed_tools", "")
         try:
             client = self._client()
+            # PermissionRequest first
+            client.post("/hooks/permission-request", json={
+                "tool_name": "Read",
+                "tool_input": {"file_path": "/src/main.py"},
+                "session_id": "test-empty-allowlist",
+            })
             resp = client.post("/hooks/post-tool-use", json={
                 "tool_name": "Read",
                 "tool_input": {"file_path": "/src/main.py"},

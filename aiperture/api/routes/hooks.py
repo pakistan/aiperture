@@ -92,12 +92,17 @@ def handle_permission_request(payload: PermissionRequestPayload):
     Otherwise returns {} so Claude Code shows its normal permission prompt,
     and tracks the request as pending for denial inference.
     """
+    from aiperture.config import settings
     from aiperture.metrics import HOOK_PERMISSION_REQUESTS
 
     # Map Claude Code tool to AIperture triple
     mapping = map_tool(payload.tool_name, payload.tool_input)
     if mapping is None:
         # Skip AIperture's own tools
+        return {}
+
+    # Skip tools that Claude Code auto-allows (no learning needed)
+    if payload.tool_name in settings.hook_auto_allowed_tools_set:
         return {}
 
     tool, action, scope = mapping
@@ -232,14 +237,20 @@ def handle_post_tool_use(
 
     pkey = _pending_key(payload.session_id, payload.tool_name, payload.tool_input)
 
-    # Resolve pending request (confirms user approved)
-    pending.resolve(pkey)
-
     # Skip recording if this was auto-approved by AIperture
     with _auto_approved_lock:
         if pkey in _auto_approved:
             _auto_approved.discard(pkey)
             return {"recorded": False, "reason": "auto_approved"}
+
+    # Resolve pending request — returns True only if PermissionRequest was seen,
+    # meaning Claude Code actually showed the user a permission prompt.
+    was_pending = pending.resolve(pkey)
+
+    if not was_pending:
+        # No PermissionRequest was seen — Claude Code auto-allowed this via its
+        # own permission settings. Not a human decision, so don't learn from it.
+        return {"recorded": False, "reason": "no_permission_prompt"}
 
     # Record implicit approval in background for speed
     background_tasks.add_task(
