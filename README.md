@@ -1,10 +1,10 @@
-# Aperture
+# AIperture
 
 **The permission layer for AI agents.**
 
 AI agents can run shell commands, read your files, call APIs, and modify databases. Today, you're the only thing standing between an agent and `rm -rf /`. Every action gets a yes/no popup. You either approve everything blindly or slow your workflow to a crawl.
 
-Aperture fixes this. It sits between your agent runtime and the outside world, learns your permission preferences over time, and auto-approves the safe stuff — so you only get asked about things that actually matter.
+AIperture fixes this. It sits between your agent runtime and the outside world, learns your permission preferences over time, and auto-approves the safe stuff — so you only get asked about things that actually matter.
 
 > **Setup guides:** [Claude Code](docs/setup-claude-code.md) | [OpenClaw](docs/setup-openclaw.md) | [REST API](#rest-api) | [Python library](#python-library)
 
@@ -19,7 +19,7 @@ Aperture fixes this. It sits between your agent runtime and the outside world, l
                        │  "Can this agent run `npm test`?"
                        ▼
 ┌──────────────────────────────────────────────────────────────────┐
-│                         APERTURE                                 │
+│                         AIPERTURE                                 │
 │                                                                  │
 │   ┌─────────────┐  ┌──────────────┐  ┌───────────────────────┐   │
 │   │ Permission  │  │ Risk Scoring │  │ Learning Engine       │   │
@@ -48,15 +48,15 @@ Aperture fixes this. It sits between your agent runtime and the outside world, l
      └─────────────┘
 ```
 
-**No LLM calls.** Every decision is deterministic — glob matching, frequency counting, and pattern lookup. Aperture never phones home, never calls an API, and adds zero latency from model inference.
+**No LLM calls.** Every decision is deterministic — glob matching, frequency counting, and pattern lookup. AIperture never phones home, never calls an API, and adds zero latency from model inference.
 
-**Runtime agnostic.** Aperture integrates via MCP (for Claude Code, OpenClaw), REST API (for any HTTP-capable runtime), or as a Python library (direct import). MCP is one integration path, not a dependency.
+**Runtime agnostic.** AIperture integrates via MCP (for Claude Code, OpenClaw), REST API (for any HTTP-capable runtime), or as a Python library (direct import). MCP is one integration path, not a dependency.
 
 ## What you experience
 
-**Day 1** — Run `aperture bootstrap developer` and 75 common safe patterns are auto-approved from the start. You only get asked about things not in the preset. Every decision you make is recorded.
+**Day 1** — Run `aiperture bootstrap developer` and 75 common safe patterns are auto-approved from the start. You only get asked about things not in the preset. Every decision you make is recorded.
 
-**Day 3** — Aperture has learned your project-specific patterns on top of the bootstrap. Custom build scripts, your test commands, project-specific file paths — all auto-approved. You still get prompted for `rm`, `curl`, and anything touching production.
+**Day 3** — AIperture has learned your project-specific patterns on top of the bootstrap. Custom build scripts, your test commands, project-specific file paths — all auto-approved. You still get prompted for `rm`, `curl`, and anything touching production.
 
 **Day 7** — The only popups you see are for genuinely new or risky actions. Everything routine is auto-approved. Everything dangerous is auto-denied. Your agent moves faster and you have a full audit trail of every decision.
 
@@ -65,21 +65,21 @@ Aperture fixes this. It sits between your agent runtime and the outside world, l
 ### 1. Install
 
 ```bash
-pip install aperture-ai
+pip install aiperture
 ```
 
-Requires Python 3.12+. This installs the `aperture` CLI and the Python package.
+Requires Python 3.12+. This installs the `aiperture` CLI and the Python package.
 
 Verify it worked:
 
 ```bash
-aperture --help
+aiperture --help
 ```
 
 You should see:
 
 ```
-Aperture — The permission layer for AI agents
+AIperture — The permission layer for AI agents
 
 Commands:
   mcp-serve    Run as MCP server (stdio transport)
@@ -93,17 +93,17 @@ Commands:
 ### 2. Initialize
 
 ```bash
-aperture init-db
+aiperture init-db
 ```
 
-This creates `aperture.db` in your current directory (SQLite). That's where all permission decisions, learned patterns, and audit logs are stored.
+This creates `aiperture.db` in your current directory (SQLite). That's where all permission decisions, learned patterns, and audit logs are stored.
 
 ### 3. Bootstrap safe patterns (recommended)
 
 Skip the cold-start problem where every action is denied:
 
 ```bash
-aperture bootstrap developer    # 75 pre-approved patterns (git, file reads, test runners, linters)
+aiperture bootstrap developer    # 75 pre-approved patterns (git, file reads, test runners, linters)
 ```
 
 This seeds the learning engine with synthetic decisions for common safe actions — `git status`, `npm test`, reading `.py`/`.ts`/`.json` files, etc. Your agent can do routine work immediately without asking you 75 times first.
@@ -121,16 +121,16 @@ Add to your `.mcp.json` (project root or `~/.claude/`):
 ```json
 {
   "mcpServers": {
-    "aperture": {
+    "aiperture": {
       "type": "stdio",
-      "command": "aperture",
+      "command": "aiperture",
       "args": ["mcp-serve"]
     }
   }
 }
 ```
 
-Start Claude Code. It now has 14 Aperture tools — `check_permission`, `approve_action`, `deny_action`, `explain_action`, `get_permission_patterns`, `store_artifact`, `verify_artifact`, `get_cost_summary`, `get_audit_trail`, `get_config`, `report_tool_execution`, `get_compliance_report`, `revoke_permission_pattern`, and `list_auto_approved_patterns`.
+Start Claude Code. It now has 14 AIperture tools — `check_permission`, `approve_action`, `deny_action`, `explain_action`, `get_permission_patterns`, `store_artifact`, `verify_artifact`, `get_cost_summary`, `get_audit_trail`, `get_config`, `report_tool_execution`, `get_compliance_report`, `revoke_permission_pattern`, and `list_auto_approved_patterns`.
 
 **[Full Claude Code guide →](docs/setup-claude-code.md)** — includes learning loop diagram, tuning, and troubleshooting.
 
@@ -145,11 +145,11 @@ Create `openclaw.json` in your project root:
 ```json
 {
   "mcpServers": {
-    "aperture": {
-      "command": "aperture",
+    "aiperture": {
+      "command": "aiperture",
       "args": ["mcp-serve"],
       "env": {
-        "APERTURE_DB_PATH": "./aperture.db"
+        "AIPERTURE_DB_PATH": "./aiperture.db"
       }
     }
   }
@@ -165,7 +165,7 @@ Add a [system prompt](examples/system_prompt.md) that tells the agent to call `c
 Start the server and point any agent runtime at it:
 
 ```bash
-aperture serve    # Runs on localhost:8100
+aiperture serve    # Runs on localhost:8100
 ```
 
 ```bash
@@ -181,13 +181,25 @@ curl -X POST localhost:8100/permissions/record \
     "tool": "shell", "action": "execute", "scope": "npm test",
     "decision": "allow", "decided_by": "user-1"
   }'
+
+# Check database health
+curl localhost:8100/health
+```
+
+If you set `AIPERTURE_API_KEY`, add the auth header to all requests:
+
+```bash
+curl -X POST localhost:8100/permissions/check \
+  -H "Authorization: Bearer your-secret-key" \
+  -H "Content-Type: application/json" \
+  -d '{"tool": "shell", "action": "execute", "scope": "npm test"}'
 ```
 
 #### Python library
 
 ```python
-from aperture.permissions import PermissionEngine
-from aperture.models import PermissionDecision
+from aiperture.permissions import PermissionEngine
+from aiperture.models import PermissionDecision
 
 engine = PermissionEngine()
 
@@ -210,11 +222,11 @@ print(verdict.decision)  # PermissionDecision.ALLOW
 
 Once connected, here's what your first week looks like:
 
-**First session (with bootstrap)** — Common safe actions are auto-approved immediately. You'll only be prompted for actions outside the preset — writes, installs, network calls, etc. Approve the safe ones; Aperture records your decisions.
+**First session (with bootstrap)** — Common safe actions are auto-approved immediately. You'll only be prompted for actions outside the preset — writes, installs, network calls, etc. Approve the safe ones; AIperture records your decisions.
 
-**First session (without bootstrap)** — Every action gets checked. You'll approve the safe ones (reading files, running tests, git commands). This is normal — Aperture is building its model of your preferences.
+**First session (without bootstrap)** — Every action gets checked. You'll approve the safe ones (reading files, running tests, git commands). This is normal — AIperture is building its model of your preferences.
 
-**After ~10 approvals per action** — Aperture starts auto-approving the patterns you've consistently allowed. `git status`? Auto-approved. `npm test`? Auto-approved. You stop seeing prompts for routine actions.
+**After ~10 approvals per action** — AIperture starts auto-approving the patterns you've consistently allowed. `git status`? Auto-approved. `npm test`? Auto-approved. You stop seeing prompts for routine actions.
 
 **Dangerous actions stay flagged** — `rm -rf`, `DROP TABLE`, shell commands touching production paths — these are scored as HIGH/CRITICAL risk and always require your explicit approval, no matter how many times you've approved other things.
 
@@ -225,7 +237,7 @@ Once connected, here's what your first week looks like:
 curl localhost:8100/permissions/patterns?min_decisions=5
 
 # Or ask your agent
-"Show me what Aperture has learned"
+"Show me what AIperture has learned"
 ```
 
 **Optional: tune the learning speed**
@@ -233,14 +245,14 @@ curl localhost:8100/permissions/patterns?min_decisions=5
 The defaults (10 decisions, 95% approval rate) are conservative. To make Aperture learn faster, run the interactive wizard:
 
 ```bash
-aperture configure
+aiperture configure
 ```
 
 Or set environment variables directly:
 
 ```bash
-export APERTURE_PERMISSION_LEARNING_MIN_DECISIONS=5
-export APERTURE_AUTO_APPROVE_THRESHOLD=0.90
+export AIPERTURE_PERMISSION_LEARNING_MIN_DECISIONS=5
+export AIPERTURE_AUTO_APPROVE_THRESHOLD=0.90
 ```
 
 ## How learning works
@@ -254,7 +266,7 @@ There's no ML here. No model, no embeddings, no training step. The learning engi
 5. If `approval_rate <= 0.05` and `total_decisions >= 10` → **auto-deny**
 6. Otherwise → **ask the human again**
 
-Both thresholds are configurable (`APERTURE_AUTO_APPROVE_THRESHOLD`, `APERTURE_PERMISSION_LEARNING_MIN_DECISIONS`).
+Both thresholds are configurable (`AIPERTURE_AUTO_APPROVE_THRESHOLD`, `AIPERTURE_PERMISSION_LEARNING_MIN_DECISIONS`).
 
 Two things make this smarter than a flat lookup table:
 
@@ -265,7 +277,7 @@ Two things make this smarter than a flat lookup table:
 
 ## Why not just use CLAUDE.md rules?
 
-If you use Claude Code, you can already write `CLAUDE.md` rules or use `/permissions` to allowlist specific commands. That works. Aperture is for when it stops working:
+If you use Claude Code, you can already write `CLAUDE.md` rules or use `/permissions` to allowlist specific commands. That works. AIperture is for when it stops working:
 
 | | CLAUDE.md / `/permissions` | Aperture |
 |---|---|---|
@@ -274,31 +286,34 @@ If you use Claude Code, you can already write `CLAUDE.md` rules or use `/permiss
 | **Granularity** | Command-level allowlists | Normalizes variants (`git log*`), tracks by content hash, scores risk |
 | **Audit** | No record of what was approved or when | Append-only log of every decision with timestamps and who decided |
 | **Team use** | Per-developer, not shared | Org-level crowd signals — surfaces what your team usually approves |
-| **Revocation** | Delete the rule | `aperture revoke` soft-deletes with audit trail, forces fresh decisions |
+| **Revocation** | Delete the rule | `aiperture revoke` soft-deletes with audit trail, forces fresh decisions |
 | **Verification** | Trust that the agent respects the rules | HMAC challenge-response proves a human saw the verdict |
 | **Risk analysis** | None — a rule is a rule | Deep shell analysis (unwraps `bash -c`, pipe-to-exec, `find -exec`) |
 
-If you're a solo developer running Claude Code on personal projects, `CLAUDE.md` rules are probably fine. Aperture is built for teams, for multi-runtime setups, and for anyone who needs an audit trail.
+If you're a solo developer running Claude Code on personal projects, `CLAUDE.md` rules are probably fine. AIperture is built for teams, for multi-runtime setups, and for anyone who needs an audit trail.
 
 ## Features
 
 | Feature | What it does |
 |---------|-------------|
 | **Permission Engine** | RBAC rules + task-scoped grants (ReBAC) + auto-learning from human decisions |
-| **Risk Scoring** | OWASP-inspired `tool danger × action severity × scope breadth` with deep analysis of shell wrappers, pipe-to-exec, and scripting oneliners |
+| **API Authentication** | Optional bearer token auth (`AIPERTURE_API_KEY`) — protects all HTTP endpoints when set |
+| **Risk Scoring** | OWASP-inspired `tool danger × action severity × scope breadth` with deep analysis of shell wrappers, pipe-to-exec, and scripting oneliners (recursion-depth capped) |
 | **Learning Engine** | Frequency-based pattern detection: tracks approval/denial rates per (tool, action, scope) and auto-decides after 10+ consistent decisions |
 | **Crowd Wisdom** | Aggregates decisions across your org — surfaces what your team usually approves or denies |
 | **Artifact Store** | SHA-256 verified, immutable storage for every agent output |
 | **Audit Trail** | Append-only compliance log of every permission decision |
 | **Compliance Tracking** | Detects unchecked tool executions — tools that ran without a prior permission check |
 | **HMAC Challenge-Response** | Cryptographic proof that a human saw the verdict before approving — prevents agent self-approval |
-| **Bootstrap Presets** | Pre-seed safe patterns (`developer`, `readonly`, `minimal`) so Aperture is useful from the first session |
-| **Revocation** | Undo learned patterns instantly — `aperture revoke shell execute "rm*"` |
+| **Bootstrap Presets** | Pre-seed safe patterns (`developer`, `readonly`, `minimal`) so AIperture is useful from the first session |
+| **Revocation** | Undo learned patterns instantly — `aiperture revoke shell execute "rm*"` |
 | **Content Awareness** | Differentiates writes to the same file by content hash — a rewrite of `main.py` is flagged even if a prior write was approved |
 | **Scope Normalization** | Groups `git log`, `git log --oneline`, `git log -5` into `git log*` so approvals accumulate faster |
+| **Health Check** | `GET /health` — database connectivity probe, returns healthy/degraded status |
+| **Circuit Breaker** | Database failures during permission checks fail closed (default deny), never crash or allow |
 | **REST API** | FastAPI server — works with any agent runtime over HTTP |
 | **MCP Server** | 14 tools for Claude Code and other MCP-compatible runtimes |
-| **CLI** | `aperture serve`, `aperture init-db`, `aperture configure`, `aperture bootstrap`, `aperture revoke` |
+| **CLI** | `aiperture serve`, `aiperture init-db`, `aiperture configure`, `aiperture bootstrap`, `aiperture revoke` |
 
 ## How decisions are made
 
@@ -323,13 +338,37 @@ When enrichment is enabled, each verdict also includes:
 
 Aperture includes several layers of protection against agent misuse:
 
+### HTTP API authentication
+
+Set `AIPERTURE_API_KEY` to require a bearer token on all HTTP API requests:
+
+```bash
+export AIPERTURE_API_KEY="your-secret-key-here"
+aiperture serve
+```
+
+All requests must include `Authorization: Bearer your-secret-key-here`. Requests without a valid key get HTTP 401. When unset (the default), all requests pass — suitable for local development.
+
+The MCP server (stdio transport) is unaffected — it runs as a child process and doesn't use HTTP.
+
 ### HMAC challenge-response (anti self-approval)
 
 Every `check_permission` verdict includes a cryptographic challenge token (HMAC-signed with a server-side secret). To approve or deny an action, the caller must echo back the challenge, nonce, and timestamp from the original verdict. This proves a human saw the verdict before acting on it. Agents cannot forge these tokens because they don't have the server secret.
 
 ### Deep risk analysis
 
-The risk scorer doesn't just look at the top-level command. It unpacks shell wrappers (`bash -c "rm -rf /"` scores as `rm -rf /`, not `bash`), detects pipe-to-exec patterns (`curl | sh`), scripting oneliners (`python -c "os.system(...)"`), and dangerous `find -exec`/`-delete` commands. HIGH and CRITICAL risk actions are **never** auto-approved regardless of history.
+The risk scorer doesn't just look at the top-level command. It unpacks shell wrappers (`bash -c "rm -rf /"` scores as `rm -rf /`, not `bash`), detects pipe-to-exec patterns (`curl | sh`), scripting oneliners (`python -c "os.system(...)"`), and dangerous `find -exec`/`-delete` commands. Recursion depth is capped at 5 levels to prevent DoS from deeply nested wrappers. HIGH and CRITICAL risk actions are **never** auto-approved regardless of history.
+
+### Fail-closed circuit breaker
+
+If the database becomes unavailable during a permission check, the engine **fails closed** — it defaults to deny rather than crashing or allowing. This ensures database outages never result in unauthorized actions.
+
+Check database health anytime:
+
+```bash
+curl localhost:8100/health
+# {"status": "healthy", "database": "connected", "service": "aiperture"}
+```
 
 ### Compliance audit tracking
 
@@ -343,9 +382,9 @@ Two tools detect when agents bypass permission checks:
 Skip the approval fatigue of the first session:
 
 ```bash
-aperture bootstrap developer    # 75 safe patterns (git, file reads, test runners, linters)
-aperture bootstrap readonly     # 48 patterns (reads only)
-aperture bootstrap minimal      # Clean slate
+aiperture bootstrap developer    # 75 safe patterns (git, file reads, test runners, linters)
+aiperture bootstrap readonly     # 48 patterns (reads only)
+aiperture bootstrap minimal      # Clean slate
 ```
 
 ### Revocation
@@ -353,8 +392,8 @@ aperture bootstrap minimal      # Clean slate
 Undo any learned pattern instantly:
 
 ```bash
-aperture revoke shell execute "rm*"              # Revoke all rm-related auto-approvals
-aperture revoke filesystem write "*.py" --org=prod  # Org-scoped revocation
+aiperture revoke shell execute "rm*"              # Revoke all rm-related auto-approvals
+aiperture revoke filesystem write "*.py" --org=prod  # Org-scoped revocation
 ```
 
 Revoked decisions are soft-deleted (preserved for audit) but excluded from learning, crowd signals, and auto-approval. The pattern immediately requires fresh human decisions.
@@ -370,22 +409,23 @@ The learning engine normalizes command scopes so that `git log`, `git log --onel
 <details>
 <summary><strong>Configuration</strong></summary>
 
-All settings via environment variables (prefix `APERTURE_`):
+All settings via environment variables (prefix `AIPERTURE_`):
 
 | Variable | Default | Description |
 |---|---|---|
-| `APERTURE_DB_BACKEND` | `sqlite` | `sqlite` or `postgres` |
-| `APERTURE_DB_PATH` | `aperture.db` | SQLite file path |
-| `APERTURE_POSTGRES_URL` | — | Postgres connection URL |
-| `APERTURE_PERMISSION_LEARNING_ENABLED` | `true` | Auto-learn from human decisions |
-| `APERTURE_PERMISSION_LEARNING_MIN_DECISIONS` | `10` | Min decisions before auto-deciding |
-| `APERTURE_AUTO_APPROVE_THRESHOLD` | `0.95` | Approval rate to trigger auto-approve |
-| `APERTURE_AUTO_DENY_THRESHOLD` | `0.05` | Approval rate to trigger auto-deny |
-| `APERTURE_INTELLIGENCE_ENABLED` | `false` | Cross-org intelligence (opt-in) |
-| `APERTURE_API_HOST` | `0.0.0.0` | API bind host |
-| `APERTURE_API_PORT` | `8100` | API bind port |
+| `AIPERTURE_DB_BACKEND` | `sqlite` | `sqlite` or `postgres` |
+| `AIPERTURE_DB_PATH` | `aiperture.db` | SQLite file path |
+| `AIPERTURE_POSTGRES_URL` | — | Postgres connection URL |
+| `AIPERTURE_PERMISSION_LEARNING_ENABLED` | `true` | Auto-learn from human decisions |
+| `AIPERTURE_PERMISSION_LEARNING_MIN_DECISIONS` | `10` | Min decisions before auto-deciding |
+| `AIPERTURE_AUTO_APPROVE_THRESHOLD` | `0.95` | Approval rate to trigger auto-approve |
+| `AIPERTURE_AUTO_DENY_THRESHOLD` | `0.05` | Approval rate to trigger auto-deny |
+| `AIPERTURE_INTELLIGENCE_ENABLED` | `false` | Cross-org intelligence (opt-in) |
+| `AIPERTURE_API_KEY` | — | Bearer token for HTTP API auth (empty = open access) |
+| `AIPERTURE_API_HOST` | `0.0.0.0` | API bind host |
+| `AIPERTURE_API_PORT` | `8100` | API bind port |
 
-Or run `aperture configure` for an interactive setup wizard.
+Or run `aiperture configure` for an interactive setup wizard.
 
 </details>
 

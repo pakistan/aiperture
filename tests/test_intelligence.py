@@ -1,8 +1,8 @@
 """Tests for the cross-org anonymized intelligence engine."""
 
 
-from aperture.permissions import IntelligenceEngine
-from aperture.permissions.intelligence import (
+from aiperture.permissions import IntelligenceEngine
+from aiperture.permissions.intelligence import (
     confidence_interval_half_width,
     debias,
     generalize_scope,

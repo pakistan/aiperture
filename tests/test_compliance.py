@@ -4,7 +4,7 @@ Validates that report_tool_execution and get_compliance_report
 correctly identify checked vs unchecked tool usage.
 """
 
-from aperture.stores.audit_store import AuditStore
+from aiperture.stores.audit_store import AuditStore
 
 
 class TestComplianceReport:
@@ -38,7 +38,7 @@ class TestComplianceReport:
             details={"tool": "shell", "action": "execute", "scope": "ls", "session_id": "s1"},
         )
 
-        from aperture.mcp_server import _compute_compliance
+        from aiperture.mcp_server import _compute_compliance
         report = _compute_compliance("s1", "comp-org")
 
         assert report["total_executions"] == 1
@@ -62,7 +62,7 @@ class TestComplianceReport:
             details={"tool": "shell", "action": "execute", "scope": "rm -rf", "session_id": "s2"},
         )
 
-        from aperture.mcp_server import _compute_compliance
+        from aiperture.mcp_server import _compute_compliance
         report = _compute_compliance("s2", "gap-org")
 
         assert report["total_executions"] == 1
@@ -112,7 +112,7 @@ class TestComplianceReport:
             details={"tool": "shell", "action": "execute", "scope": "curl", "session_id": sid},
         )
 
-        from aperture.mcp_server import _compute_compliance
+        from aiperture.mcp_server import _compute_compliance
         report = _compute_compliance(sid, org)
 
         assert report["total_executions"] == 2
@@ -122,7 +122,7 @@ class TestComplianceReport:
 
     def test_no_executions_full_compliance(self):
         """No executions at all => ratio defaults to 1.0."""
-        from aperture.mcp_server import _compute_compliance
+        from aiperture.mcp_server import _compute_compliance
         report = _compute_compliance("empty-session", "empty-org")
 
         assert report["total_executions"] == 0
@@ -167,7 +167,7 @@ class TestComplianceReport:
             details={"tool": "shell", "action": "execute", "scope": "hack", "session_id": "sB"},
         )
 
-        from aperture.mcp_server import _compute_compliance
+        from aiperture.mcp_server import _compute_compliance
 
         # Session A should be fully compliant
         report_a = _compute_compliance("sA", org)
@@ -185,5 +185,5 @@ class TestComplianceConfig:
 
     def test_compliance_tracking_enabled_default(self):
         """compliance_tracking_enabled defaults to True."""
-        import aperture.config
-        assert aperture.config.settings.compliance_tracking_enabled is True
+        import aiperture.config
+        assert aiperture.config.settings.compliance_tracking_enabled is True

@@ -1,8 +1,8 @@
 """Tests for the risk classification engine."""
 
-from aperture.models import RiskTier
-from aperture.permissions import classify_risk
-from aperture.permissions.risk import scope_breadth
+from aiperture.models import RiskTier
+from aiperture.permissions import classify_risk
+from aiperture.permissions.risk import scope_breadth
 
 
 class TestCriticalOverride:

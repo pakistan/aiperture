@@ -2,8 +2,8 @@
 
 from fastapi.testclient import TestClient
 
-import aperture.config
-from aperture.api import create_app
+import aiperture.config
+from aiperture.api import create_app
 
 
 class TestGetConfig:
@@ -24,7 +24,7 @@ class TestGetConfig:
         client = TestClient(app)
         resp = client.get("/config")
         data = resp.json()
-        for field in aperture.config.Settings.TUNABLE_FIELDS:
+        for field in aiperture.config.Settings.TUNABLE_FIELDS:
             assert field in data["settings"], f"Missing tunable field: {field}"
             assert field in data["descriptions"], f"Missing description for: {field}"
 
@@ -41,7 +41,7 @@ class TestGetConfig:
         app = create_app()
         client = TestClient(app)
         # Set a known value
-        aperture.config.settings.auto_approve_threshold = 0.88
+        aiperture.config.settings.auto_approve_threshold = 0.88
         resp = client.get("/config")
         data = resp.json()
         assert data["settings"]["auto_approve_threshold"] == 0.88
@@ -60,7 +60,7 @@ class TestPatchConfig:
         assert data["updated"] is True
         assert data["settings"]["auto_approve_threshold"] == 0.80
         # Verify in-memory update
-        assert aperture.config.settings.auto_approve_threshold == 0.80
+        assert aiperture.config.settings.auto_approve_threshold == 0.80
 
     def test_patch_multiple_fields(self):
         app = create_app()
@@ -117,15 +117,15 @@ class TestPatchConfig:
         assert resp.json()["updated"] is True
 
     def test_patch_persists_to_env_file(self, tmp_path):
-        """PATCH writes .aperture.env file."""
-        env_path = tmp_path / ".aperture.env"
+        """PATCH writes .aiperture.env file."""
+        env_path = tmp_path / ".aiperture.env"
         # Monkey-patch update_settings to use tmp env file
-        original_update = aperture.config.update_settings
+        original_update = aiperture.config.update_settings
 
         def patched_update(updates, env_file_path=None):
             return original_update(updates, env_file_path=str(env_path))
 
-        aperture.config.update_settings = patched_update
+        aiperture.config.update_settings = patched_update
         try:
             app = create_app()
             client = TestClient(app)
@@ -133,9 +133,9 @@ class TestPatchConfig:
                 "settings": {"intelligence_epsilon": 2.5},
             })
             content = env_path.read_text()
-            assert "APERTURE_INTELLIGENCE_EPSILON=2.5" in content
+            assert "AIPERTURE_INTELLIGENCE_EPSILON=2.5" in content
         finally:
-            aperture.config.update_settings = original_update
+            aiperture.config.update_settings = original_update
 
     def test_get_after_patch_reflects_update(self):
         """GET /config after PATCH returns the updated values."""
@@ -151,19 +151,19 @@ class TestPatchConfig:
 class TestConfigUnit:
 
     def test_get_tunable_config(self):
-        config = aperture.config.get_tunable_config()
-        assert set(config.keys()) == aperture.config.Settings.TUNABLE_FIELDS
+        config = aiperture.config.get_tunable_config()
+        assert set(config.keys()) == aiperture.config.Settings.TUNABLE_FIELDS
 
     def test_update_settings_rejects_unknown_field(self, tmp_path):
         with __import__("pytest").raises(ValueError, match="(?i)non-tunable"):
-            aperture.config.update_settings(
+            aiperture.config.update_settings(
                 {"api_port": 9999},
                 env_file_path=str(tmp_path / ".env"),
             )
 
     def test_write_env_file(self, tmp_path):
-        env_path = tmp_path / ".aperture.env"
-        aperture.config._write_env_file(str(env_path))
+        env_path = tmp_path / ".aiperture.env"
+        aiperture.config._write_env_file(str(env_path))
         content = env_path.read_text()
-        assert "APERTURE_AUTO_APPROVE_THRESHOLD=" in content
-        assert "APERTURE_PERMISSION_LEARNING_ENABLED=" in content
+        assert "AIPERTURE_AUTO_APPROVE_THRESHOLD=" in content
+        assert "AIPERTURE_PERMISSION_LEARNING_ENABLED=" in content

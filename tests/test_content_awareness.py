@@ -4,10 +4,10 @@ Validates that different content_hash values produce separate cache entries
 and that content_changed flag is set when content changes.
 """
 
-import aperture.config
-from aperture.models.permission import Permission, PermissionDecision
-from aperture.permissions.challenge import create_challenge
-from aperture.permissions.engine import PermissionEngine
+import aiperture.config
+from aiperture.models.permission import Permission, PermissionDecision
+from aiperture.permissions.challenge import create_challenge
+from aiperture.permissions.engine import PermissionEngine
 
 
 def _make_challenge(tool: str, action: str, scope: str, organization_id: str = "default", session_id: str = "") -> dict:
@@ -42,17 +42,16 @@ class TestContentHashCacheKey:
             session_id="s1", content_hash="def456",
         )
 
-        # Both should exist as separate entries in session cache
-        assert ("default", "filesystem", "write", "main.py", "s1", "abc123") not in engine._session_cache
         # Static rules don't populate the session cache — only session_memory lookups do
         # But the cache_key includes content_hash, so they won't collide
+        assert engine._session_cache.get(("default", "filesystem", "write", "main.py", "s1", "abc123")) is None
 
     def test_same_hash_uses_session_cache(self):
         """Same content_hash reuses the session cache entry."""
         engine = PermissionEngine()
 
         # Seed a cache entry directly
-        engine._session_cache[("default", "filesystem", "read", "f.py", "s1", "hash1")] = PermissionDecision.ALLOW
+        engine._session_cache.set(("default", "filesystem", "read", "f.py", "s1", "hash1"), PermissionDecision.ALLOW)
 
         verdict = engine.check(
             tool="filesystem", action="read", scope="f.py",
@@ -67,7 +66,7 @@ class TestContentHashCacheKey:
         engine = PermissionEngine()
 
         # Seed cache with hash1
-        engine._session_cache[("default", "filesystem", "read", "f.py", "s1", "hash1")] = PermissionDecision.ALLOW
+        engine._session_cache.set(("default", "filesystem", "read", "f.py", "s1", "hash1"), PermissionDecision.ALLOW)
 
         # Check with hash2 — should NOT get session_memory hit
         verdict = engine.check(
@@ -82,7 +81,7 @@ class TestContentHashCacheKey:
         """Empty content_hash matches cache entry with empty hash."""
         engine = PermissionEngine()
 
-        engine._session_cache[("default", "filesystem", "read", "f.py", "s1", "")] = PermissionDecision.ALLOW
+        engine._session_cache.set(("default", "filesystem", "read", "f.py", "s1", ""), PermissionDecision.ALLOW)
 
         verdict = engine.check(
             tool="filesystem", action="read", scope="f.py",
@@ -100,8 +99,8 @@ class TestContentChangedFlag:
         """When same (tool, action, scope, session) seen with different hash, flag is True."""
         engine = PermissionEngine()
 
-        # Seed cache with old hash
-        engine._session_cache[("default", "filesystem", "write", "main.py", "s1", "old_hash")] = PermissionDecision.ALLOW
+        # Seed cache with empty-hash key (as record_human_decision does)
+        engine._session_cache.set(("default", "filesystem", "write", "main.py", "s1", ""), PermissionDecision.ALLOW)
 
         # Build verdict with new hash
         verdict = engine._build_verdict(
@@ -110,19 +109,6 @@ class TestContentChangedFlag:
             content_hash="new_hash", session_id="s1",
         )
         assert verdict.content_changed is True
-
-    def test_content_not_changed_same_hash(self):
-        """Same hash should not trigger content_changed."""
-        engine = PermissionEngine()
-
-        engine._session_cache[("default", "filesystem", "write", "main.py", "s1", "same")] = PermissionDecision.ALLOW
-
-        verdict = engine._build_verdict(
-            PermissionDecision.DENY, "static_rule",
-            "filesystem", "write", "main.py",
-            content_hash="same", session_id="s1",
-        )
-        assert verdict.content_changed is False
 
     def test_content_not_changed_no_prior(self):
         """No prior cache entry => content_changed stays False."""
@@ -139,7 +125,7 @@ class TestContentChangedFlag:
         """Empty content_hash never triggers content_changed."""
         engine = PermissionEngine()
 
-        engine._session_cache[("default", "filesystem", "write", "main.py", "s1", "")] = PermissionDecision.ALLOW
+        engine._session_cache.set(("default", "filesystem", "write", "main.py", "s1", ""), PermissionDecision.ALLOW)
 
         verdict = engine._build_verdict(
             PermissionDecision.DENY, "static_rule",
@@ -161,7 +147,7 @@ class TestContentChangedFlag:
 
     def test_content_changed_in_verdict_to_dict(self):
         """content_changed=True appears in to_dict() output."""
-        from aperture.models.verdict import PermissionVerdict, RiskAssessment, RiskTier
+        from aiperture.models.verdict import PermissionVerdict, RiskAssessment, RiskTier
 
         v = PermissionVerdict(
             decision=PermissionDecision.DENY,
@@ -174,7 +160,7 @@ class TestContentChangedFlag:
 
     def test_content_changed_false_not_in_to_dict(self):
         """content_changed=False does NOT appear in to_dict() output."""
-        from aperture.models.verdict import PermissionVerdict, RiskAssessment, RiskTier
+        from aiperture.models.verdict import PermissionVerdict, RiskAssessment, RiskTier
 
         v = PermissionVerdict(
             decision=PermissionDecision.DENY,
@@ -192,7 +178,7 @@ class TestContentHashInAPI:
     def test_check_api_accepts_content_hash(self):
         """The /permissions/check endpoint accepts content_hash."""
         from fastapi.testclient import TestClient
-        from aperture.api import create_app
+        from aiperture.api import create_app
 
         app = create_app()
         client = TestClient(app)

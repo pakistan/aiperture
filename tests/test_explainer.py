@@ -1,7 +1,7 @@
 """Tests for the template-based command explainer."""
 
-from aperture.models import RiskAssessment, RiskTier
-from aperture.permissions import explain_action
+from aiperture.models import RiskAssessment, RiskTier
+from aiperture.permissions import explain_action
 
 
 def _low_risk():

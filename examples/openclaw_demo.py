@@ -44,7 +44,7 @@ def run_real_openclaw_demo() -> None:
 
     examples_dir = Path(__file__).resolve().parent
 
-    with tempfile.TemporaryDirectory(prefix="aperture-openclaw-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="aiperture-openclaw-") as tmp:
         workspace = Path(tmp)
 
         # 1. Copy config files into the isolated workspace
@@ -61,21 +61,21 @@ def run_real_openclaw_demo() -> None:
         # 2. Patch the config to use the workspace DB path
         config_path = workspace / "openclaw.json"
         config = json.loads(config_path.read_text())
-        config["mcpServers"]["aperture"]["env"]["APERTURE_DB_PATH"] = str(
-            workspace / "aperture.db"
+        config["mcpServers"]["aiperture"]["env"]["AIPERTURE_DB_PATH"] = str(
+            workspace / "aiperture.db"
         )
         config_path.write_text(json.dumps(config, indent=2))
 
         # 3. Initialize Aperture DB
         print("[2/6] Initializing Aperture database ...")
-        env = {**os.environ, "APERTURE_DB_PATH": str(workspace / "aperture.db")}
+        env = {**os.environ, "AIPERTURE_DB_PATH": str(workspace / "aiperture.db")}
         subprocess.run(
-            ["aperture", "init-db"],
+            ["aiperture", "init-db"],
             env=env,
             check=True,
             capture_output=True,
         )
-        print("  Database created at", workspace / "aperture.db")
+        print("  Database created at", workspace / "aiperture.db")
 
         # 4. Print instructions for interactive use
         print("\n[3/6] Workspace ready at:", workspace)
@@ -124,13 +124,13 @@ def run_real_openclaw_demo() -> None:
         # 6. Show the Aperture audit trail (if anything was recorded)
         print("\n[5/6] Checking Aperture audit trail ...")
         try:
-            import aperture.config
-            from aperture.config import Settings
-            from aperture.db import reset_engine
-            from aperture.stores.audit_store import AuditStore
+            import aiperture.config
+            from aiperture.config import Settings
+            from aiperture.db import reset_engine
+            from aiperture.stores.audit_store import AuditStore
 
-            aperture.config.settings = Settings(
-                db_path=str(workspace / "aperture.db"),
+            aiperture.config.settings = Settings(
+                db_path=str(workspace / "aiperture.db"),
             )
             reset_engine()
 
@@ -160,11 +160,11 @@ def run_simulated_demo() -> None:
     print("  Install OpenClaw for the real agent demo: npm install -g openclaw@latest\n")
 
     with tempfile.TemporaryDirectory() as tmp:
-        import aperture.config
-        from aperture.config import Settings
-        from aperture.db.engine import init_db, reset_engine
+        import aiperture.config
+        from aiperture.config import Settings
+        from aiperture.db.engine import init_db, reset_engine
 
-        aperture.config.settings = Settings(
+        aiperture.config.settings = Settings(
             db_path=str(Path(tmp) / "demo.db"),
             artifact_storage_dir=str(Path(tmp) / "artifacts"),
             # Low thresholds for quick demo
@@ -176,7 +176,7 @@ def run_simulated_demo() -> None:
 
         from fastapi.testclient import TestClient
 
-        from aperture.api.app import create_app
+        from aiperture.api.app import create_app
 
         app = create_app()
         client = TestClient(app)

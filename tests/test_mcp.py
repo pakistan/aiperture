@@ -10,7 +10,7 @@ import json
 import pytest
 from mcp.server.fastmcp.exceptions import ToolError
 
-from aperture.mcp_server import (
+from aiperture.mcp_server import (
     approve_action,
     check_permission,
     deny_action,
@@ -38,7 +38,7 @@ def _get_challenge(tool: str, action: str, scope: str, session_id: str = "", org
 
 
 class TestMCPToolsImportable:
-    """Wiring: all MCP tools are importable from aperture.mcp_server."""
+    """Wiring: all MCP tools are importable from aiperture.mcp_server."""
 
     def test_all_tools_importable(self):
         """Every MCP tool function is importable from the public module."""
@@ -58,7 +58,7 @@ class TestMCPToolsImportable:
 
     def test_update_config_not_exposed(self):
         """update_config is NOT an MCP tool — config changes only via CLI/REST."""
-        import aperture.mcp_server as mod
+        import aiperture.mcp_server as mod
         assert not hasattr(mod, "update_config"), "update_config should not be an MCP tool"
 
 
@@ -405,12 +405,12 @@ class TestGetPermissionPatterns:
 
     def test_patterns_with_sufficient_decisions(self):
         """After enough decisions, patterns are surfaced."""
-        import aperture.config
-        aperture.config.settings.permission_learning_enabled = False  # don't auto-decide
+        import aiperture.config
+        aiperture.config.settings.permission_learning_enabled = False  # don't auto-decide
 
         # Record 10 human approvals for the same pattern (bypass engine, insert directly)
-        from aperture.mcp_server import _engine
-        from aperture.permissions.challenge import create_challenge
+        from aiperture.mcp_server import _engine
+        from aiperture.permissions.challenge import create_challenge
 
         for i in range(10):
             ch = create_challenge("filesystem", "read", "docs/*", organization_id="default")
@@ -418,7 +418,7 @@ class TestGetPermissionPatterns:
                 tool="filesystem",
                 action="read",
                 scope="docs/*",
-                decision=__import__("aperture.models.permission", fromlist=["PermissionDecision"]).PermissionDecision.ALLOW,
+                decision=__import__("aiperture.models.permission", fromlist=["PermissionDecision"]).PermissionDecision.ALLOW,
                 decided_by=f"user-{i % 3}",
                 organization_id="default",
                 challenge=ch.token,

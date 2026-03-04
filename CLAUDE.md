@@ -1,8 +1,8 @@
-# CLAUDE.md — Aperture
+# CLAUDE.md — AIperture
 
 ## What This Is
 
-Aperture is the permission layer for AI agents. It controls what passes through.
+AIperture is the permission layer for AI agents. It controls what passes through.
 
 It sits between enterprises and whatever AI agent runtimes they use (Claude Code, OpenAI Agents SDK, Google ADK, LangChain, etc.). It does not run agents. It does not make LLM calls. It does not care which model is on the other end.
 
@@ -14,12 +14,12 @@ Three core capabilities:
 ## Quick Start
 
 ```bash
-cd aperture
+cd aiperture
 source .venv312/bin/activate
-aperture configure                # interactive setup wizard (writes .aperture.env)
-aperture serve                    # start API server at localhost:8100
-aperture mcp-serve                # start MCP server on stdio
-aperture init-db                  # initialize database
+aiperture configure                # interactive setup wizard (writes .aiperture.env)
+aiperture serve                    # start API server at localhost:8100
+aiperture mcp-serve                # start MCP server on stdio
+aiperture init-db                  # initialize database
 python -m pytest tests/ -v        # run all tests
 python examples/openclaw_demo.py  # run learning loop demo
 ```
@@ -33,15 +33,18 @@ python examples/openclaw_demo.py  # run learning loop demo
 ## Project Structure
 
 ```
-aperture/
-├── aperture/
+aiperture/
+├── aiperture/
 │   ├── api/                 # FastAPI routes
+│   │   ├── auth.py              # Bearer token auth (AIPERTURE_API_KEY) + plugin auth_backend
+│   │   ├── app.py               # FastAPI app factory + plugin loading
 │   │   └── routes/
 │   │       ├── permissions.py    # /permissions/* endpoints
 │   │       ├── artifacts.py      # /artifacts/* endpoints
 │   │       ├── audit.py          # /audit/* endpoints
+│   │       ├── health.py         # /health endpoint (DB + plugin health checkers)
 │   │       └── intelligence.py   # /intelligence/* endpoints
-│   ├── db/                  # Database engine (SQLite/Postgres)
+│   ├── db/                  # Database engine (SQLite/Postgres) + plugin db_engine
 │   ├── models/              # SQLModel table definitions + dataclasses
 │   │   ├── permission.py    # Permission, PermissionLog, TaskPermission
 │   │   ├── artifact.py      # Artifact with SHA-256 hashing
@@ -49,10 +52,10 @@ aperture/
 │   │   ├── intelligence.py  # GlobalPermissionStat (cross-org DP stats)
 │   │   └── verdict.py       # PermissionVerdict, RiskAssessment, OrgSignal, etc.
 │   ├── permissions/         # Permission engine + learning + intelligence
-│   │   ├── engine.py        # RBAC + ReBAC + auto-learning + verdict enrichment + revocation
+│   │   ├── engine.py        # RBAC + ReBAC + auto-learning + plugin session_cache
 │   │   ├── learning.py      # Pattern detection from decision history
-│   │   ├── intelligence.py  # Cross-org DP intelligence engine
-│   │   ├── risk.py          # OWASP-based risk classification + deep shell analysis
+│   │   ├── intelligence.py  # Cross-org DP intelligence + plugin intelligence_backend
+│   │   ├── risk.py          # OWASP-based risk classification + plugin risk_rules
 │   │   ├── crowd.py         # Org-level crowd signals
 │   │   ├── similarity.py    # Taxonomy-based pattern similarity
 │   │   ├── explainer.py     # Human-readable action explanations
@@ -62,21 +65,27 @@ aperture/
 │   │   └── scope_normalize.py # Scope normalization for learning
 │   ├── stores/              # Persistence layer
 │   │   ├── artifact_store.py
-│   │   └── audit_store.py
-│   ├── config.py            # Settings via APERTURE_* env vars + runtime updates
+│   │   └── audit_store.py   # + plugin audit_hook
+│   ├── plugins.py           # Plugin registry + Protocol definitions (open-core)
+│   ├── config.py            # Settings via AIPERTURE_* env vars + plugin config
 │   ├── cli.py               # CLI entry point (serve | mcp-serve | init-db | configure | bootstrap | revoke)
-│   └── mcp_server.py        # MCP server (14 tools, stdio transport)
+│   └── mcp_server.py        # MCP server (14 tools, stdio transport) + plugin mcp_tools
+├── docs/
+│   └── plugins.md           # Plugin development guide
 ├── examples/
 │   ├── openclaw_demo.py     # Dual-mode demo (real OpenClaw or simulated)
-│   ├── openclaw.json        # OpenClaw config wiring Aperture as MCP server
+│   ├── openclaw.json        # OpenClaw config wiring AIperture as MCP server
 │   ├── openclaw_setup.sh    # Setup script for isolated demo workspace
-│   └── system_prompt.md     # System prompt for Aperture-gated agent
+│   └── system_prompt.md     # System prompt for AIperture-gated agent
 ├── tests/
 ├── main.py                  # Server entry point
 └── pyproject.toml
 ```
 
 ## API Endpoints
+
+### Health (`/health`)
+- `GET /health` — Database connectivity probe (returns `healthy` or `degraded` with details)
 
 ### Permissions (`/permissions`)
 - `POST /permissions/check` — Check if an action is permitted (with optional enrichment)
@@ -102,7 +111,7 @@ aperture/
 
 ### Config (`/config`)
 - `GET /config` — Current tunable settings and descriptions
-- `PATCH /config` — Update tunable settings at runtime (persists to `.aperture.env`)
+- `PATCH /config` — Update tunable settings at runtime (persists to `.aiperture.env`)
 
 ### Intelligence (`/intelligence`)
 - `GET /intelligence/global-signal` — Cross-org DP-protected permission signal
@@ -135,14 +144,16 @@ aperture/
 
 ## Security Architecture
 
-1. **HMAC challenge-response** — Every non-ALLOW verdict includes a cryptographic challenge token (HMAC-SHA256 signed with a server-side secret in `challenge.py`). `approve_action`/`deny_action` require a valid challenge, preventing agents from self-approving without human involvement.
-2. **No config mutation via MCP** — The `update_config` MCP tool was removed. Agents can read config (`get_config`) but cannot lower thresholds. Config changes require the CLI wizard or HTTP API.
-3. **Deep risk analysis** — `risk.py` unpacks shell wrappers (`bash -c`, `sudo`), pipe-to-exec (`curl | sh`), scripting oneliners (`python -c "os.system(...)"`), and `find -exec`. Inner command risk is what counts. HIGH/CRITICAL actions are never auto-approved.
-4. **Compliance tracking** — `report_tool_execution` records tool executions. `get_compliance_report` compares executions against permission checks to find unchecked tool usage.
-5. **Bootstrap presets** — `presets.py` provides `developer` (75 patterns), `readonly` (48), `minimal` (0) to reduce first-session approval fatigue.
-6. **Content awareness** — `content_hash` parameter in `check_permission` differentiates writes by content. Session cache key is a 5-tuple: `(tool, action, scope, session_id, content_hash)`.
-7. **Scope normalization** — `scope_normalize.py` groups command variants (e.g., `git log --oneline -5` → `git log*`) for faster learning.
-8. **Revocation** — `engine.revoke_pattern()` soft-deletes decisions via `revoked_at` timestamp. Excluded from learning, crowd signals, and pattern detection. Preserved for audit.
+1. **HTTP API authentication** — Optional bearer token auth via `AIPERTURE_API_KEY` env var. When set, all HTTP API routes require `Authorization: Bearer <key>`. MCP server (stdio) is unaffected. When unset, open access for local development.
+2. **HMAC challenge-response** — Every non-ALLOW verdict includes a cryptographic challenge token (HMAC-SHA256 signed with a server-side secret in `challenge.py`). `approve_action`/`deny_action` require a valid challenge, preventing agents from self-approving without human involvement.
+3. **No config mutation via MCP** — The `update_config` MCP tool was removed. Agents can read config (`get_config`) but cannot lower thresholds. Config changes require the CLI wizard or HTTP API.
+4. **Deep risk analysis** — `risk.py` unpacks shell wrappers (`bash -c`, `sudo`), pipe-to-exec (`curl | sh`), scripting oneliners (`python -c "os.system(...)"`), and `find -exec`. Inner command risk is what counts. Recursion depth is capped at 5 levels to prevent DoS. HIGH/CRITICAL actions are never auto-approved.
+5. **Fail-closed circuit breaker** — If the database becomes unavailable during a permission check, the engine fails closed (defaults to deny). The `GET /health` endpoint probes database connectivity.
+6. **Compliance tracking** — `report_tool_execution` records tool executions. `get_compliance_report` compares executions against permission checks to find unchecked tool usage.
+7. **Bootstrap presets** — `presets.py` provides `developer` (75 patterns), `readonly` (48), `minimal` (0) to reduce first-session approval fatigue.
+8. **Content awareness** — `content_hash` parameter in `check_permission` differentiates writes by content. Session cache key is a 5-tuple: `(tool, action, scope, session_id, content_hash)`.
+9. **Scope normalization** — `scope_normalize.py` groups command variants (e.g., `git log --oneline -5` → `git log*`) for faster learning.
+10. **Revocation** — `engine.revoke_pattern()` soft-deletes decisions via `revoked_at` timestamp. Excluded from learning, crowd signals, and pattern detection. Preserved for audit.
 
 ## Architecture Rules
 
@@ -150,52 +161,53 @@ aperture/
 2. **Append-only audit.** AuditEvents are never deleted or modified.
 3. **SHA-256 everything.** Every artifact is hashed on storage. Integrity re-verifiable at any time.
 4. **Fire-and-forget logging.** Audit/logging never breaks the primary operation.
-5. **Provider agnostic.** The `runtime_id` field tracks which external runtime produced an artifact, but Aperture never calls any LLM.
+5. **Provider agnostic.** The `runtime_id` field tracks which external runtime produced an artifact, but AIperture never calls any LLM.
 6. **Differential privacy.** Cross-org intelligence uses RAPPOR-style local DP. True decisions never leave the org.
 
 ## Configuration
 
 Config precedence (highest first):
-1. Shell env vars (`export APERTURE_*=...`) — always win
-2. `.aperture.env` file values (written by `aperture configure` or `PATCH /config`)
+1. Shell env vars (`export AIPERTURE_*=...`) — always win
+2. `.aiperture.env` file values (written by `aiperture configure` or `PATCH /config`)
 3. Defaults in Settings class
 
-Run `aperture configure` for an interactive setup wizard, or use `PATCH /config` at runtime.
+Run `aiperture configure` for an interactive setup wizard, or use `PATCH /config` at runtime.
 
-### All settings (`APERTURE_*` env vars)
+### All settings (`AIPERTURE_*` env vars)
 
 | Variable | Default | Tunable? | Description |
 |---|---|---|---|
-| `APERTURE_DB_BACKEND` | `sqlite` | No | `sqlite` or `postgres` |
-| `APERTURE_DB_PATH` | `aperture.db` | No | SQLite file path |
-| `APERTURE_POSTGRES_URL` | `` | No | Postgres connection URL |
-| `APERTURE_PERMISSION_LEARNING_ENABLED` | `true` | Yes | Auto-learn from human decisions |
-| `APERTURE_PERMISSION_LEARNING_MIN_DECISIONS` | `10` | Yes | Min decisions before auto-deciding |
-| `APERTURE_AUTO_APPROVE_THRESHOLD` | `0.95` | Yes | Approval rate to auto-approve |
-| `APERTURE_AUTO_DENY_THRESHOLD` | `0.05` | Yes | Approval rate to auto-deny |
-| `APERTURE_INTELLIGENCE_ENABLED` | `false` | Yes | Enable cross-org DP intelligence (opt-in) |
-| `APERTURE_INTELLIGENCE_EPSILON` | `1.0` | Yes | DP noise level (higher = less private) |
-| `APERTURE_INTELLIGENCE_MIN_ORGS` | `5` | Yes | Min orgs before surfacing global signal |
-| `APERTURE_ARTIFACT_STORAGE_DIR` | `` | No | Artifact file storage directory |
-| `APERTURE_API_HOST` | `0.0.0.0` | No | API server bind host |
-| `APERTURE_API_PORT` | `8100` | No | API server port |
+| `AIPERTURE_DB_BACKEND` | `sqlite` | No | `sqlite` or `postgres` |
+| `AIPERTURE_DB_PATH` | `aiperture.db` | No | SQLite file path |
+| `AIPERTURE_POSTGRES_URL` | `` | No | Postgres connection URL |
+| `AIPERTURE_PERMISSION_LEARNING_ENABLED` | `true` | Yes | Auto-learn from human decisions |
+| `AIPERTURE_PERMISSION_LEARNING_MIN_DECISIONS` | `10` | Yes | Min decisions before auto-deciding |
+| `AIPERTURE_AUTO_APPROVE_THRESHOLD` | `0.95` | Yes | Approval rate to auto-approve |
+| `AIPERTURE_AUTO_DENY_THRESHOLD` | `0.05` | Yes | Approval rate to auto-deny |
+| `AIPERTURE_INTELLIGENCE_ENABLED` | `false` | Yes | Enable cross-org DP intelligence (opt-in) |
+| `AIPERTURE_INTELLIGENCE_EPSILON` | `1.0` | Yes | DP noise level (higher = less private) |
+| `AIPERTURE_INTELLIGENCE_MIN_ORGS` | `5` | Yes | Min orgs before surfacing global signal |
+| `AIPERTURE_ARTIFACT_STORAGE_DIR` | `` | No | Artifact file storage directory |
+| `AIPERTURE_API_KEY` | `` | No | Bearer token for HTTP API auth (empty = open access) |
+| `AIPERTURE_API_HOST` | `0.0.0.0` | No | API server bind host |
+| `AIPERTURE_API_PORT` | `8100` | No | API server port |
 
-"Tunable" settings can be updated at runtime via `PATCH /config` or the CLI wizard (`aperture configure`). Infrastructure settings (No) require restart.
+"Tunable" settings can be updated at runtime via `PATCH /config` or the CLI wizard (`aiperture configure`). Infrastructure settings (No) require restart.
 
 ## OpenClaw Integration
 
-Aperture integrates with [OpenClaw (ClawDBot)](https://github.com/clawdbot/openclaw) as an MCP server. OpenClaw is an open-source AI agent that supports MCP tool servers.
+AIperture integrates with [OpenClaw (ClawDBot)](https://github.com/clawdbot/openclaw) as an MCP server. OpenClaw is an open-source AI agent that supports MCP tool servers.
 
 ### Quick Start (with OpenClaw)
 
 ```bash
 # Prerequisites
 npm install -g openclaw@latest      # install OpenClaw
-cd aperture && pip install -e .      # install Aperture
+pip install -e .                     # install AIperture
 
 # Option A: Setup script
 bash examples/openclaw_setup.sh
-cd /tmp/aperture-openclaw-demo && openclaw chat
+cd /tmp/aiperture-openclaw-demo && openclaw chat
 
 # Option B: Python demo (auto-detects OpenClaw)
 python examples/openclaw_demo.py
@@ -206,16 +218,16 @@ python examples/openclaw_demo.py --sim
 
 ### How It Works
 
-1. `examples/openclaw.json` wires Aperture as an MCP server with fast-learning thresholds (3 decisions, 80% threshold)
+1. `examples/openclaw.json` wires AIperture as an MCP server with fast-learning thresholds (3 decisions, 80% threshold)
 2. `examples/system_prompt.md` instructs the agent to call `check_permission` before every action
-3. The agent asks to read a file -> Aperture denies (no history)
-4. User approves 3 times -> Aperture learns the pattern
-5. Agent asks to read another file -> Aperture auto-approves
+3. The agent asks to read a file -> AIperture denies (no history)
+4. User approves 3 times -> AIperture learns the pattern
+5. Agent asks to read another file -> AIperture auto-approves
 
 ### Config Files
 
 | File | Purpose |
 |------|---------|
-| `examples/openclaw.json` | MCP server config (points Aperture at an isolated DB) |
-| `examples/system_prompt.md` | Instructs the agent to gate all actions through Aperture |
-| `examples/openclaw_setup.sh` | Creates `/tmp/aperture-openclaw-demo/` with fresh DB |
+| `examples/openclaw.json` | MCP server config (points AIperture at an isolated DB) |
+| `examples/system_prompt.md` | Instructs the agent to gate all actions through AIperture |
+| `examples/openclaw_setup.sh` | Creates `/tmp/aiperture-openclaw-demo/` with fresh DB |

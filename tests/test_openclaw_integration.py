@@ -6,7 +6,7 @@ Also validates the example OpenClaw config files ship correctly.
 Three test tiers:
   1. Config validation — shipped example files are correct
   2. Learning loop via HTTP — TestClient-based end-to-end tests
-  3. MCP protocol — real stdio client connecting to `aperture mcp-serve`
+  3. MCP protocol — real stdio client connecting to `aiperture mcp-serve`
 """
 
 import json
@@ -15,8 +15,8 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-import aperture.config
-from aperture.api import create_app
+import aiperture.config
+from aiperture.api import create_app
 
 
 def _api_challenge(client, tool: str, action: str, scope: str, organization_id: str = "default") -> dict:
@@ -50,8 +50,8 @@ async def _mcp_challenge(session, tool: str, action: str, scope: str,
 # Path to the examples/ directory (relative to repo root)
 EXAMPLES_DIR = Path(__file__).resolve().parent.parent / "examples"
 
-# Path to the aperture CLI in the current venv
-APERTURE_CLI = str(Path(sys.executable).parent / "aperture")
+# Path to the aiperture CLI in the current venv
+AIPERTURE_CLI = str(Path(sys.executable).parent / "aiperture")
 
 
 # ── Config validation tests ──────────────────────────────────────────
@@ -61,29 +61,29 @@ class TestOpenClawConfig:
     """Validate that the shipped OpenClaw config files are correct."""
 
     def test_openclaw_json_config_valid(self):
-        """The example openclaw.json is valid and wires Aperture correctly."""
+        """The example openclaw.json is valid and wires AIperture correctly."""
         config_path = EXAMPLES_DIR / "openclaw.json"
         assert config_path.exists(), f"Missing {config_path}"
 
         config = json.loads(config_path.read_text())
         assert "mcpServers" in config
-        mcp = config["mcpServers"]["aperture"]
-        assert mcp["command"] == "aperture"
+        mcp = config["mcpServers"]["aiperture"]
+        assert mcp["command"] == "aiperture"
         assert mcp["args"] == ["mcp-serve"]
-        assert "APERTURE_DB_PATH" in mcp["env"]
-        assert "APERTURE_PERMISSION_LEARNING_MIN_DECISIONS" in mcp["env"]
-        assert "APERTURE_AUTO_APPROVE_THRESHOLD" in mcp["env"]
-        assert "APERTURE_AUTO_DENY_THRESHOLD" in mcp["env"]
+        assert "AIPERTURE_DB_PATH" in mcp["env"]
+        assert "AIPERTURE_PERMISSION_LEARNING_MIN_DECISIONS" in mcp["env"]
+        assert "AIPERTURE_AUTO_APPROVE_THRESHOLD" in mcp["env"]
+        assert "AIPERTURE_AUTO_DENY_THRESHOLD" in mcp["env"]
 
     def test_openclaw_json_thresholds_are_demo_friendly(self):
         """Demo thresholds should be low for quick learning."""
         config = json.loads((EXAMPLES_DIR / "openclaw.json").read_text())
-        env = config["mcpServers"]["aperture"]["env"]
-        assert int(env["APERTURE_PERMISSION_LEARNING_MIN_DECISIONS"]) <= 5
-        assert float(env["APERTURE_AUTO_APPROVE_THRESHOLD"]) <= 0.90
+        env = config["mcpServers"]["aiperture"]["env"]
+        assert int(env["AIPERTURE_PERMISSION_LEARNING_MIN_DECISIONS"]) <= 5
+        assert float(env["AIPERTURE_AUTO_APPROVE_THRESHOLD"]) <= 0.90
 
     def test_system_prompt_exists(self):
-        """The system prompt file exists and mentions key Aperture tools."""
+        """The system prompt file exists and mentions key AIperture tools."""
         prompt_path = EXAMPLES_DIR / "system_prompt.md"
         assert prompt_path.exists(), f"Missing {prompt_path}"
         text = prompt_path.read_text()
@@ -106,9 +106,9 @@ class TestLearningLoop:
 
     def _setup_low_thresholds(self):
         """Configure low thresholds for fast learning in tests."""
-        aperture.config.settings.permission_learning_min_decisions = 5
-        aperture.config.settings.auto_approve_threshold = 0.90
-        aperture.config.settings.auto_deny_threshold = 0.05
+        aiperture.config.settings.permission_learning_min_decisions = 5
+        aiperture.config.settings.auto_approve_threshold = 0.90
+        aiperture.config.settings.auto_deny_threshold = 0.05
 
     def test_deny_with_no_history(self):
         """First check with no rules and no history should deny."""
@@ -232,21 +232,21 @@ class TestLearningLoop:
 
 # ── MCP protocol tests ──────────────────────────────────────────────
 #
-# These tests spawn `aperture mcp-serve` as a subprocess and connect
+# These tests spawn `aiperture mcp-serve` as a subprocess and connect
 # via the MCP Python SDK over stdio — the exact same protocol path
 # that OpenClaw (or any MCP client) uses.
 
 
 def _mcp_server_params(db_path: str, **extra_env: str):
-    """Create StdioServerParameters for the Aperture MCP server."""
+    """Create StdioServerParameters for the AIperture MCP server."""
     from mcp import StdioServerParameters
 
-    env = {"APERTURE_DB_PATH": db_path, **extra_env}
-    return StdioServerParameters(command=APERTURE_CLI, args=["mcp-serve"], env=env)
+    env = {"AIPERTURE_DB_PATH": db_path, **extra_env}
+    return StdioServerParameters(command=AIPERTURE_CLI, args=["mcp-serve"], env=env)
 
 
 class TestMCPToolDiscovery:
-    """Verify Aperture's MCP server exposes the correct tools over stdio."""
+    """Verify AIperture's MCP server exposes the correct tools over stdio."""
 
     EXPECTED_TOOLS = {
         "check_permission",
@@ -265,18 +265,18 @@ class TestMCPToolDiscovery:
         "list_auto_approved_patterns",
     }
 
-    async def test_server_identifies_as_aperture(self, tmp_path):
-        """MCP initialize handshake returns server name 'aperture'."""
+    async def test_server_identifies_as_aiperture(self, tmp_path):
+        """MCP initialize handshake returns server name 'aiperture'."""
         from mcp import ClientSession, stdio_client
 
         params = _mcp_server_params(str(tmp_path / "test.db"))
         async with stdio_client(params) as (read, write):
             async with ClientSession(read, write) as session:
                 result = await session.initialize()
-                assert result.serverInfo.name == "aperture"
+                assert result.serverInfo.name == "aiperture"
 
     async def test_lists_all_fourteen_tools(self, tmp_path):
-        """MCP list_tools returns all 14 Aperture tools."""
+        """MCP list_tools returns all 14 AIperture tools."""
         from mcp import ClientSession, stdio_client
 
         params = _mcp_server_params(str(tmp_path / "test.db"))
@@ -414,7 +414,7 @@ class TestMCPLearningLoop:
     """Full permission learning loop over the MCP protocol.
 
     This is the core integration test: it exercises the exact path that
-    OpenClaw (or any MCP client) uses to interact with Aperture.
+    OpenClaw (or any MCP client) uses to interact with AIperture.
     """
 
     async def test_deny_approve_three_times_auto_approve(self, tmp_path):
@@ -423,8 +423,8 @@ class TestMCPLearningLoop:
 
         params = _mcp_server_params(
             str(tmp_path / "test.db"),
-            APERTURE_PERMISSION_LEARNING_MIN_DECISIONS="3",
-            APERTURE_AUTO_APPROVE_THRESHOLD="0.80",
+            AIPERTURE_PERMISSION_LEARNING_MIN_DECISIONS="3",
+            AIPERTURE_AUTO_APPROVE_THRESHOLD="0.80",
         )
         async with stdio_client(params) as (read, write):
             async with ClientSession(read, write) as session:
@@ -474,8 +474,8 @@ class TestMCPLearningLoop:
 
         params = _mcp_server_params(
             str(tmp_path / "test.db"),
-            APERTURE_PERMISSION_LEARNING_MIN_DECISIONS="3",
-            APERTURE_AUTO_APPROVE_THRESHOLD="0.80",
+            AIPERTURE_PERMISSION_LEARNING_MIN_DECISIONS="3",
+            AIPERTURE_AUTO_APPROVE_THRESHOLD="0.80",
         )
         async with stdio_client(params) as (read, write):
             async with ClientSession(read, write) as session:
@@ -542,7 +542,7 @@ class TestMCPLearningLoop:
 
         params = _mcp_server_params(
             str(tmp_path / "test.db"),
-            APERTURE_PERMISSION_LEARNING_MIN_DECISIONS="3",
+            AIPERTURE_PERMISSION_LEARNING_MIN_DECISIONS="3",
         )
         async with stdio_client(params) as (read, write):
             async with ClientSession(read, write) as session:

@@ -2,7 +2,7 @@
 
 import pytest
 
-from aperture.permissions.presets import (
+from aiperture.permissions.presets import (
     PRESET_DEVELOPER,
     PRESET_MINIMAL,
     PRESET_READONLY,
@@ -53,7 +53,7 @@ class TestApplyPreset:
 
     def test_bootstrap_decisions_enable_auto_approve(self):
         """After applying preset, check_permission auto-approves matching patterns."""
-        from aperture.permissions.engine import PermissionEngine
+        from aiperture.permissions.engine import PermissionEngine
 
         apply_preset("developer")
         engine = PermissionEngine()
@@ -66,8 +66,8 @@ class TestApplyPreset:
         """All bootstrap decisions have decided_by='human:bootstrap'."""
         from sqlmodel import Session, select
 
-        from aperture.db.engine import get_engine
-        from aperture.models.permission import PermissionLog
+        from aiperture.db.engine import get_engine
+        from aiperture.models.permission import PermissionLog
 
         apply_preset("readonly")
         with Session(get_engine()) as session:

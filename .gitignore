@@ -12,4 +12,4 @@ build/
 .DS_Store
 *.egg
 .env
-.aperture.env
+.aiperture.env

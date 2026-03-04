@@ -2,10 +2,10 @@
 
 from sqlmodel import Session
 
-from aperture.db import get_engine
-from aperture.models import PermissionDecision, PermissionLog, SimilarPattern
-from aperture.permissions import find_similar_patterns
-from aperture.permissions.similarity import (
+from aiperture.db import get_engine
+from aiperture.models import PermissionDecision, PermissionLog, SimilarPattern
+from aiperture.permissions import find_similar_patterns
+from aiperture.permissions.similarity import (
     _command_similarity,
     _path_prefix_similarity,
     resource_similarity,
@@ -18,7 +18,7 @@ from aperture.permissions.similarity import (
 
 def test_find_similar_patterns_importable_from_public_api():
     """Wiring test: find_similar_patterns is exported from the permissions package."""
-    from aperture.permissions import find_similar_patterns as fn
+    from aiperture.permissions import find_similar_patterns as fn
     assert callable(fn)
 
 
@@ -402,8 +402,8 @@ class TestFindSimilarPatternsIntegrationWithEngine:
 
     def test_enriched_verdict_includes_similar_patterns(self):
         """PermissionEngine.check(enrich=True) populates similar_patterns from DB history."""
-        from aperture.permissions.challenge import create_challenge
-        from aperture.permissions.engine import PermissionEngine
+        from aiperture.permissions.challenge import create_challenge
+        from aiperture.permissions.engine import PermissionEngine
 
         engine = PermissionEngine()
 

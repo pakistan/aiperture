@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# Setup script for Aperture + OpenClaw demo.
+# Setup script for AIperture + OpenClaw demo.
 # Creates an isolated workspace with a fresh DB and fast-learning thresholds.
 #
 # Usage:
 #   bash examples/openclaw_setup.sh
-#   cd /tmp/aperture-openclaw-demo && openclaw chat
+#   cd /tmp/aiperture-openclaw-demo && openclaw chat
 set -euo pipefail
 
-DEMO_DIR="/tmp/aperture-openclaw-demo"
+DEMO_DIR="/tmp/aiperture-openclaw-demo"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # ── 1. Check prerequisites ──────────────────────────────────────────
@@ -17,9 +17,9 @@ if ! command -v openclaw >/dev/null 2>&1; then
     exit 1
 fi
 
-if ! command -v aperture >/dev/null 2>&1; then
-    echo "ERROR: Aperture CLI not found."
-    echo "Install it:  cd aperture && pip install -e ."
+if ! command -v aiperture >/dev/null 2>&1; then
+    echo "ERROR: AIperture CLI not found."
+    echo "Install it:  cd aiperture && pip install -e ."
     exit 1
 fi
 
@@ -36,13 +36,13 @@ cp "$SCRIPT_DIR/system_prompt.md" "$DEMO_DIR/system_prompt.md"
 cat > "$DEMO_DIR/README.md" <<'EOF'
 # Demo Project
 
-This is a sample project used to demonstrate Aperture's permission learning.
-The agent will try to read this file, and Aperture will learn to allow it.
+This is a sample project used to demonstrate AIperture's permission learning.
+The agent will try to read this file, and AIperture will learn to allow it.
 EOF
 
-# ── 4. Initialize a fresh Aperture DB ───────────────────────────────
-echo "Initializing Aperture database ..."
-APERTURE_DB_PATH="$DEMO_DIR/aperture.db" aperture init-db
+# ── 4. Initialize a fresh AIperture DB ───────────────────────────────
+echo "Initializing AIperture database ..."
+AIPERTURE_DB_PATH="$DEMO_DIR/aiperture.db" aiperture init-db
 
 # ── 5. Print instructions ───────────────────────────────────────────
 echo ""
@@ -54,8 +54,8 @@ echo "  cd $DEMO_DIR"
 echo "  openclaw chat"
 echo ""
 echo "Try these prompts to see the learning loop:"
-echo "  1. 'Read the file README.md'        -> Aperture denies (no history)"
-echo "  2. Approve it 3 times               -> Aperture learns"
-echo "  3. 'Read setup.py'                  -> Aperture auto-approves (learned pattern)"
-echo "  4. 'Show me the permission patterns' -> See what Aperture learned"
+echo "  1. 'Read the file README.md'        -> AIperture denies (no history)"
+echo "  2. Approve it 3 times               -> AIperture learns"
+echo "  3. 'Read setup.py'                  -> AIperture auto-approves (learned pattern)"
+echo "  4. 'Show me the permission patterns' -> See what AIperture learned"
 echo ""

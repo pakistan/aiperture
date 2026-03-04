@@ -4,13 +4,13 @@ import time
 
 import pytest
 
-from aperture.models.permission import Permission, PermissionDecision
-from aperture.permissions.challenge import (
+from aiperture.models.permission import Permission, PermissionDecision
+from aiperture.permissions.challenge import (
     create_challenge,
     reset_secret_for_testing,
     verify_challenge,
 )
-from aperture.permissions.engine import PermissionEngine
+from aiperture.permissions.engine import PermissionEngine
 
 
 class TestChallengeModule:

@@ -1,7 +1,7 @@
 """Tests for artifact storage and verification."""
 
-from aperture.models.artifact import ArtifactType, VerificationStatus
-from aperture.stores.artifact_store import ArtifactStore
+from aiperture.models.artifact import ArtifactType, VerificationStatus
+from aiperture.stores.artifact_store import ArtifactStore
 
 
 class TestArtifactStore:

@@ -1,12 +1,12 @@
 """Tests for the crowd signal / org stats aggregator."""
 
-from aperture.models import OrgSignal, PermissionDecision
-from aperture.permissions import (
+from aiperture.models import OrgSignal, PermissionDecision
+from aiperture.permissions import (
     PermissionEngine,
     compute_auto_approve_distance,
     get_org_signal,
 )
-from aperture.permissions.challenge import create_challenge
+from aiperture.permissions.challenge import create_challenge
 
 
 def _make_challenge(tool: str, action: str, scope: str, organization_id: str = "default", session_id: str = "") -> dict:

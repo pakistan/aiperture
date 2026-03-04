@@ -2,7 +2,7 @@
 
 from fastapi.testclient import TestClient
 
-from aperture.api import create_app
+from aiperture.api import create_app
 
 
 def _get_challenge(client: TestClient, tool: str, action: str, scope: str) -> dict:
@@ -27,7 +27,7 @@ class TestHealthEndpoint:
         client = TestClient(app)
         resp = client.get("/health")
         assert resp.status_code == 200
-        assert resp.json()["service"] == "aperture"
+        assert resp.json()["service"] == "aiperture"
 
 
 class TestPermissionAPI:
@@ -80,8 +80,8 @@ class TestPermissionAPI:
         assert data["explanation"]
 
     def test_record_and_patterns(self):
-        import aperture.config
-        aperture.config.settings.permission_learning_min_decisions = 15  # prevent auto-learn during recording
+        import aiperture.config
+        aiperture.config.settings.permission_learning_min_decisions = 15  # prevent auto-learn during recording
         app = create_app()
         client = TestClient(app)
 
@@ -249,8 +249,8 @@ class TestPermissionAPI:
 
     def test_similar_finds_related_patterns(self):
         """After recording decisions, /similar finds structurally similar patterns."""
-        import aperture.config
-        aperture.config.settings.permission_learning_min_decisions = 15
+        import aiperture.config
+        aiperture.config.settings.permission_learning_min_decisions = 15
         app = create_app()
         client = TestClient(app)
 
@@ -286,8 +286,8 @@ class TestPermissionAPI:
 
     def test_similar_response_shape(self):
         """Each pattern in the response has the correct fields and types."""
-        import aperture.config
-        aperture.config.settings.permission_learning_min_decisions = 15
+        import aiperture.config
+        aiperture.config.settings.permission_learning_min_decisions = 15
         app = create_app()
         client = TestClient(app)
 
@@ -508,7 +508,7 @@ class TestAuditAPI:
 
     def test_get_audit_event_happy_path(self):
         """An audit event created by a permission check can be retrieved by its event_id."""
-        from aperture.stores.audit_store import AuditStore
+        from aiperture.stores.audit_store import AuditStore
 
         app = create_app()
         client = TestClient(app)
@@ -541,7 +541,7 @@ class TestAuditAPI:
 
     def test_get_audit_event_response_includes_state_fields(self):
         """The single-event endpoint returns previous_state and new_state fields."""
-        from aperture.stores.audit_store import AuditStore
+        from aiperture.stores.audit_store import AuditStore
 
         app = create_app()
         client = TestClient(app)
@@ -586,7 +586,7 @@ class TestAuditAPI:
 
     def test_entity_history_returns_matching_events(self):
         """Events recorded with entity_type/entity_id appear in entity history."""
-        from aperture.stores.audit_store import AuditStore
+        from aiperture.stores.audit_store import AuditStore
 
         app = create_app()
         client = TestClient(app)
@@ -635,7 +635,7 @@ class TestAuditAPI:
 
     def test_entity_history_respects_entity_type(self):
         """Events with the same entity_id but different entity_type are not returned."""
-        from aperture.stores.audit_store import AuditStore
+        from aiperture.stores.audit_store import AuditStore
 
         app = create_app()
         client = TestClient(app)

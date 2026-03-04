@@ -1,8 +1,8 @@
 """Tests for the permission engine — RBAC, ReBAC, learning, and enriched verdicts."""
 
-from aperture.models import Permission, PermissionDecision, RiskTier
-from aperture.permissions import PermissionEngine, PermissionLearner
-from aperture.permissions.challenge import create_challenge
+from aiperture.models import Permission, PermissionDecision, RiskTier
+from aiperture.permissions import PermissionEngine, PermissionLearner
+from aiperture.permissions.challenge import create_challenge
 
 
 def _make_challenge(tool: str, action: str, scope: str, organization_id: str = "default", session_id: str = "") -> dict:
@@ -96,9 +96,9 @@ class TestPermissionLearning:
 
     def test_auto_approve_after_consistent_approvals(self):
         engine = PermissionEngine()
-        import aperture.config
-        aperture.config.settings.permission_learning_min_decisions = 5
-        aperture.config.settings.auto_approve_threshold = 0.95
+        import aiperture.config
+        aiperture.config.settings.permission_learning_min_decisions = 5
+        aiperture.config.settings.auto_approve_threshold = 0.95
 
         # Record 10 human approvals
         for i in range(10):
@@ -118,8 +118,8 @@ class TestPermissionLearning:
 
     def test_no_auto_decision_with_few_samples(self):
         engine = PermissionEngine()
-        import aperture.config
-        aperture.config.settings.permission_learning_min_decisions = 10
+        import aiperture.config
+        aiperture.config.settings.permission_learning_min_decisions = 10
 
         # Only 3 decisions — not enough
         for _ in range(3):
@@ -139,9 +139,9 @@ class TestPermissionLearning:
     def test_high_risk_actions_never_auto_approved(self):
         """HIGH/CRITICAL risk actions must always require human approval, even with strong history."""
         engine = PermissionEngine()
-        import aperture.config
-        aperture.config.settings.permission_learning_min_decisions = 3
-        aperture.config.settings.auto_approve_threshold = 0.80
+        import aiperture.config
+        aiperture.config.settings.permission_learning_min_decisions = 3
+        aiperture.config.settings.auto_approve_threshold = 0.80
 
         # Record 20 human approvals of a destructive shell command
         for i in range(20):
@@ -164,8 +164,8 @@ class TestPermissionLearning:
 
     def test_learner_detects_patterns(self):
         engine = PermissionEngine()
-        import aperture.config
-        aperture.config.settings.permission_learning_enabled = False  # disable auto for this test
+        import aiperture.config
+        aiperture.config.settings.permission_learning_enabled = False  # disable auto for this test
 
         # Record 20 decisions: 19 allow, 1 deny = 95% approval
         for i in range(20):

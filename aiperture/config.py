@@ -1,0 +1,188 @@
+"""AIperture configuration via environment variables.
+
+All config uses AIPERTURE_ prefix. Example: AIPERTURE_DB_PATH=./data.sqlite
+
+Tunable settings can also be read from .aiperture.env and updated at runtime
+via the config API, CLI wizard, or MCP tools.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any, ClassVar
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_prefix="AIPERTURE_",
+        env_file=".aiperture.env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
+    # Database
+    db_backend: str = "sqlite"  # "sqlite" | "postgres"
+    db_path: str = "aiperture.db"
+    postgres_url: str = ""
+
+    # Permissions
+    permission_learning_enabled: bool = True
+    permission_learning_min_decisions: int = 10
+    auto_approve_threshold: float = 0.95  # >95% approval rate -> auto-approve
+    auto_deny_threshold: float = 0.05  # <5% approval rate -> auto-deny
+
+    # Intelligence (cross-org)
+    intelligence_enabled: bool = False  # opt-in
+    intelligence_epsilon: float = 1.0  # local DP noise level (higher = less private)
+    intelligence_min_orgs: int = 5  # minimum orgs before surfacing global signal
+
+    # Compliance
+    compliance_tracking_enabled: bool = True  # track checked vs unchecked tool executions
+
+    # Artifacts
+    artifact_storage_dir: str = ""
+
+    # API
+    api_host: str = "0.0.0.0"
+    api_port: int = 8100
+    api_key: str = ""  # If set, requires Authorization: Bearer <key> on all HTTP requests
+
+    # --- Tunable field metadata (not persisted) ---
+
+    TUNABLE_FIELDS: ClassVar[frozenset[str]] = frozenset({
+        "permission_learning_enabled",
+        "permission_learning_min_decisions",
+        "auto_approve_threshold",
+        "auto_deny_threshold",
+        "intelligence_enabled",
+        "intelligence_epsilon",
+        "intelligence_min_orgs",
+    })
+
+    TUNABLE_DESCRIPTIONS: ClassVar[dict[str, str]] = {
+        "permission_learning_enabled": "Auto-learn from human approval/denial decisions",
+        "permission_learning_min_decisions": "Minimum human decisions before auto-deciding",
+        "auto_approve_threshold": "Approval rate (0.0-1.0) to trigger auto-approve",
+        "auto_deny_threshold": "Approval rate (0.0-1.0) to trigger auto-deny",
+        "intelligence_enabled": "Enable cross-org differential-privacy intelligence",
+        "intelligence_epsilon": "DP noise level (higher = more utility, less privacy)",
+        "intelligence_min_orgs": "Minimum orgs required before surfacing global signal",
+    }
+
+
+def get_tunable_config() -> dict[str, Any]:
+    """Return current values of all tunable settings."""
+    return {field: getattr(settings, field) for field in Settings.TUNABLE_FIELDS}
+
+
+def update_settings(
+    updates: dict[str, Any],
+    env_file_path: str | None = None,
+) -> Settings:
+    """Update tunable settings in-memory and persist to .aiperture.env.
+
+    Args:
+        updates: Dict of field_name -> new_value. Only TUNABLE_FIELDS accepted.
+        env_file_path: Path to write .aiperture.env. Defaults to ".aiperture.env".
+
+    Returns:
+        The updated Settings singleton.
+
+    Raises:
+        ValueError: If a non-tunable field is provided or validation fails.
+    """
+    global settings
+
+    bad_fields = set(updates) - Settings.TUNABLE_FIELDS
+    if bad_fields:
+        raise ValueError(
+            f"Non-tunable fields cannot be updated at runtime: {sorted(bad_fields)}"
+        )
+
+    # Type coercion — validate types match the field annotations
+    field_types = {
+        "permission_learning_enabled": bool,
+        "permission_learning_min_decisions": int,
+        "auto_approve_threshold": float,
+        "auto_deny_threshold": float,
+        "intelligence_enabled": bool,
+        "intelligence_epsilon": float,
+        "intelligence_min_orgs": int,
+    }
+    coerced: dict[str, Any] = {}
+    for field, value in updates.items():
+        expected_type = field_types.get(field)
+        if expected_type is not None:
+            try:
+                coerced[field] = expected_type(value)
+            except (TypeError, ValueError):
+                raise ValueError(
+                    f"Invalid type for {field}: expected {expected_type.__name__}, got {type(value).__name__}"
+                )
+        else:
+            coerced[field] = value
+
+    # Range validation
+    approve = coerced.get("auto_approve_threshold", settings.auto_approve_threshold)
+    deny = coerced.get("auto_deny_threshold", settings.auto_deny_threshold)
+    if not (0.0 <= deny < approve <= 1.0):
+        raise ValueError(
+            f"Thresholds must satisfy 0.0 <= auto_deny_threshold ({deny}) "
+            f"< auto_approve_threshold ({approve}) <= 1.0"
+        )
+
+    min_decisions = coerced.get("permission_learning_min_decisions", settings.permission_learning_min_decisions)
+    if min_decisions < 1:
+        raise ValueError(f"permission_learning_min_decisions must be >= 1, got {min_decisions}")
+
+    epsilon = coerced.get("intelligence_epsilon", settings.intelligence_epsilon)
+    if epsilon <= 0:
+        raise ValueError(f"intelligence_epsilon must be > 0, got {epsilon}")
+
+    min_orgs = coerced.get("intelligence_min_orgs", settings.intelligence_min_orgs)
+    if min_orgs < 1:
+        raise ValueError(f"intelligence_min_orgs must be >= 1, got {min_orgs}")
+
+    # Apply in-memory (using coerced/validated values)
+    for field, value in coerced.items():
+        object.__setattr__(settings, field, value)
+
+    # Persist to .aiperture.env
+    _write_env_file(env_file_path or ".aiperture.env")
+
+    return settings
+
+
+def _write_env_file(path: str) -> None:
+    """Write all tunable settings to an env file."""
+    lines = []
+    for field in sorted(Settings.TUNABLE_FIELDS):
+        value = getattr(settings, field)
+        env_key = f"AIPERTURE_{field.upper()}"
+        lines.append(f"{env_key}={value}")
+    Path(path).write_text("\n".join(lines) + "\n")
+
+
+# Plugin config sections — plugins can register additional config via register_plugin_config()
+_plugin_configs: dict[str, dict] = {}
+
+
+def register_plugin_config(name: str, fields: dict) -> None:
+    """Register additional config fields from a plugin.
+
+    Args:
+        name: Plugin name (e.g. "enterprise").
+        fields: Dict of field_name -> {"default": ..., "description": ...}.
+    """
+    _plugin_configs[name] = fields
+
+
+def get_plugin_configs() -> dict[str, dict]:
+    """Return all registered plugin config sections."""
+    return dict(_plugin_configs)
+
+
+# Module-level singleton — access via `aiperture.config.settings`
+settings = Settings()

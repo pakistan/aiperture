@@ -1,13 +1,13 @@
 {
   "mcpServers": {
-    "aperture": {
-      "command": "aperture",
+    "aiperture": {
+      "command": "aiperture",
       "args": ["mcp-serve"],
       "env": {
-        "APERTURE_DB_PATH": "./aperture.db",
-        "APERTURE_PERMISSION_LEARNING_MIN_DECISIONS": "3",
-        "APERTURE_AUTO_APPROVE_THRESHOLD": "0.80",
-        "APERTURE_AUTO_DENY_THRESHOLD": "0.05"
+        "AIPERTURE_DB_PATH": "./aiperture.db",
+        "AIPERTURE_PERMISSION_LEARNING_MIN_DECISIONS": "3",
+        "AIPERTURE_AUTO_APPROVE_THRESHOLD": "0.80",
+        "AIPERTURE_AUTO_DENY_THRESHOLD": "0.05"
       }
     }
   }

@@ -1,6 +1,6 @@
 """Tests for scope normalization."""
 
-from aperture.permissions.scope_normalize import normalize_scope
+from aiperture.permissions.scope_normalize import normalize_scope
 
 
 class TestNormalizeShellScope:

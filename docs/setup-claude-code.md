@@ -1,65 +1,65 @@
-# Setting Up Aperture with Claude Code
+# Setting Up AIperture with Claude Code
 
-This guide walks you through adding Aperture as Claude Code's permission layer via MCP (Model Context Protocol). After setup, Claude Code will check permissions through Aperture before taking actions, and Aperture will learn your preferences over time.
+This guide walks you through adding AIperture as Claude Code's permission layer via MCP (Model Context Protocol). After setup, Claude Code will check permissions through AIperture before taking actions, and AIperture will learn your preferences over time.
 
 ## Prerequisites
 
 - Python 3.12+
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code) installed
 
-## Step 1: Install Aperture
+## Step 1: Install AIperture
 
 ```bash
-pip install aperture-ai
+pip install aiperture
 ```
 
 Verify it installed:
 
 ```bash
-aperture --help
+aiperture --help
 ```
 
 ## Step 2: Initialize the database
 
 ```bash
-aperture init-db
+aiperture init-db
 ```
 
-This creates `aperture.db` in the current directory (SQLite by default).
+This creates `aiperture.db` in the current directory (SQLite by default).
 
-## Step 3: Add Aperture to your MCP config
+## Step 3: Add AIperture to your MCP config
 
 Add the following to your `.mcp.json` (in your project root or `~/.claude/`):
 
 ```json
 {
   "mcpServers": {
-    "aperture": {
+    "aiperture": {
       "type": "stdio",
-      "command": "aperture",
+      "command": "aiperture",
       "args": ["mcp-serve"]
     }
   }
 }
 ```
 
-If you already have other MCP servers configured, add the `"aperture"` key inside the existing `"mcpServers"` object.
+If you already have other MCP servers configured, add the `"aiperture"` key inside the existing `"mcpServers"` object.
 
 ## Step 4: Start using Claude Code
 
-That's it. Restart Claude Code (or open a new session) and Aperture is active.
+That's it. Restart Claude Code (or open a new session) and AIperture is active.
 
 ### What to expect on first use
 
-When you start your first Claude Code session with Aperture:
+When you start your first Claude Code session with AIperture:
 
-1. **Claude sees the 14 Aperture tools** — it can call `check_permission`, `approve_action`, `deny_action`, `explain_action`, `get_permission_patterns`, `store_artifact`, `verify_artifact`, `get_cost_summary`, `get_audit_trail`, `get_config`, `report_tool_execution`, `get_compliance_report`, `revoke_permission_pattern`, and `list_auto_approved_patterns`.
+1. **Claude sees the 14 AIperture tools** — it can call `check_permission`, `approve_action`, `deny_action`, `explain_action`, `get_permission_patterns`, `store_artifact`, `verify_artifact`, `get_cost_summary`, `get_audit_trail`, `get_config`, `report_tool_execution`, `get_compliance_report`, `revoke_permission_pattern`, and `list_auto_approved_patterns`.
 
-2. **Everything starts as denied** — Aperture has no history yet, so the first time Claude tries to read a file or run a command, it will be denied. Claude will ask you to approve it.
+2. **Everything starts as denied** — AIperture has no history yet, so the first time Claude tries to read a file or run a command, it will be denied. Claude will ask you to approve it.
 
-3. **You approve the safe stuff** — When Claude says "Aperture denied this, want to approve?", say yes for things like `git status`, `cat README.md`, `npm test`. Say no for anything you wouldn't want an agent doing unsupervised.
+3. **You approve the safe stuff** — When Claude says "AIperture denied this, want to approve?", say yes for things like `git status`, `cat README.md`, `npm test`. Say no for anything you wouldn't want an agent doing unsupervised.
 
-4. **Aperture learns your preferences** — After 10 consistent approvals of the same action type (e.g., `filesystem.read`), Aperture auto-approves it going forward. You stop getting asked.
+4. **AIperture learns your preferences** — After 10 consistent approvals of the same action type (e.g., `filesystem.read`), AIperture auto-approves it going forward. You stop getting asked.
 
 5. **Dangerous actions stay flagged** — `rm -rf`, shell commands with broad wildcards, anything touching system paths — these are scored as HIGH/CRITICAL risk and always require your explicit approval.
 
@@ -71,7 +71,7 @@ This is what it looks like in practice:
 | `approve_action` | Record a human approval (requires valid challenge token) |
 | `deny_action` | Record a human denial (requires valid challenge token) |
 | `explain_action` | Get a human-readable explanation of what an action does |
-| `get_permission_patterns` | View what Aperture has learned from your decisions |
+| `get_permission_patterns` | View what AIperture has learned from your decisions |
 | `report_tool_execution` | Report that a tool was executed (for compliance tracking) |
 | `get_compliance_report` | See which tool executions had prior permission checks |
 | `revoke_permission_pattern` | Undo a learned auto-approval pattern |
@@ -80,13 +80,13 @@ This is what it looks like in practice:
 | `verify_artifact` | Verify an artifact's integrity |
 | `get_cost_summary` | Get token and cost breakdown |
 | `get_audit_trail` | Query the compliance audit trail |
-| `get_config` | View current Aperture settings |
+| `get_config` | View current AIperture settings |
 
-## Aperture vs Claude Code's built-in permissions
+## AIperture vs Claude Code's built-in permissions
 
-Claude Code has its own permission system — the "Allow once / Allow for session / Always allow / Deny" popup. That's separate from Aperture. Here's how they relate:
+Claude Code has its own permission system — the "Allow once / Allow for session / Always allow / Deny" popup. That's separate from AIperture. Here's how they relate:
 
-| | Claude Code built-in | Aperture |
+| | Claude Code built-in | AIperture |
 |---|---|---|
 | **What it controls** | Whether Claude can call a tool at all | Whether the *action* (read this file, run this command) is allowed |
 | **Persistence** | Per-session or permanent per-machine | Per-database, shared across sessions, learns over time |
@@ -94,16 +94,16 @@ Claude Code has its own permission system — the "Allow once / Allow for sessio
 | **Audit trail** | No | Yes — every decision logged |
 | **Risk scoring** | No | Yes — LOW/MEDIUM/HIGH/CRITICAL per action |
 
-In practice, you'll likely set Claude Code's built-in permissions to "Always allow" for Aperture's MCP tools (since Aperture itself is the permission layer). Then all permission decisions flow through Aperture, which learns and persists them.
+In practice, you'll likely set Claude Code's built-in permissions to "Always allow" for AIperture's MCP tools (since AIperture itself is the permission layer). Then all permission decisions flow through AIperture, which learns and persists them.
 
-**Important:** Aperture only checks permissions for tool calls that access external resources (files, shell, APIs). It does NOT interfere with Claude asking you questions, presenting options, or having a normal conversation. Those happen without involving Aperture at all.
+**Important:** AIperture only checks permissions for tool calls that access external resources (files, shell, APIs). It does NOT interfere with Claude asking you questions, presenting options, or having a normal conversation. Those happen without involving AIperture at all.
 
 ## How the learning loop works
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
 │                                                                     │
-│  Claude Code                     Aperture                           │
+│  Claude Code                     AIperture                           │
 │  ───────────                     ────────                           │
 │                                                                     │
 │  "I need to run npm test"                                           │
@@ -127,7 +127,7 @@ In practice, you'll likely set Claude Code's built-in permissions to "Always all
 │         │     scope: npm test                                       │
 │         │                        ◀──── Return verdict ────┤         │
 │         │                                                           │
-│  "Aperture auto-approved npm test                                   │
+│  "AIperture auto-approved npm test                                   │
 │   based on your previous decisions."                                │
 │                                                                     │
 └─────────────────────────────────────────────────────────────────────┘
@@ -135,35 +135,35 @@ In practice, you'll likely set Claude Code's built-in permissions to "Always all
 
 ## Skip the first-session approval flood
 
-By default, Aperture asks about everything on first use. You can pre-seed safe patterns using bootstrap presets:
+By default, AIperture asks about everything on first use. You can pre-seed safe patterns using bootstrap presets:
 
 ```bash
-aperture bootstrap developer    # 75 patterns: git, file reads, test runners, linters
-aperture bootstrap readonly     # 48 patterns: file reads and safe shell commands only
-aperture bootstrap minimal      # Clean slate (default behavior)
+aiperture bootstrap developer    # 75 patterns: git, file reads, test runners, linters
+aiperture bootstrap readonly     # 48 patterns: file reads and safe shell commands only
+aiperture bootstrap minimal      # Clean slate (default behavior)
 ```
 
 After bootstrapping, common actions like `git status`, `cat README.md`, and `npm test` are auto-approved immediately.
 
 ## Revoking learned patterns
 
-If Aperture learned to auto-approve something you no longer want:
+If AIperture learned to auto-approve something you no longer want:
 
 ```bash
-aperture revoke shell execute "rm*"     # Revoke all rm-related auto-approvals
+aiperture revoke shell execute "rm*"     # Revoke all rm-related auto-approvals
 ```
 
 Or use the MCP tool from within Claude Code — ask Claude to call `revoke_permission_pattern`. The pattern immediately requires fresh human decisions. Revoked records are preserved in the audit trail.
 
 ## Tuning the learning speed
 
-By default, Aperture needs 10 consistent human decisions at a 95% approval rate before auto-approving. You can adjust this:
+By default, AIperture needs 10 consistent human decisions at a 95% approval rate before auto-approving. You can adjust this:
 
-**Via environment variables** (in your `.aperture.env` or shell):
+**Via environment variables** (in your `.aiperture.env` or shell):
 
 ```bash
-APERTURE_PERMISSION_LEARNING_MIN_DECISIONS=5   # Fewer decisions needed
-APERTURE_AUTO_APPROVE_THRESHOLD=0.90           # Lower approval rate required
+AIPERTURE_PERMISSION_LEARNING_MIN_DECISIONS=5   # Fewer decisions needed
+AIPERTURE_AUTO_APPROVE_THRESHOLD=0.90           # Lower approval rate required
 ```
 
 **Via the MCP config** (per-project):
@@ -171,13 +171,13 @@ APERTURE_AUTO_APPROVE_THRESHOLD=0.90           # Lower approval rate required
 ```json
 {
   "mcpServers": {
-    "aperture": {
+    "aiperture": {
       "type": "stdio",
-      "command": "aperture",
+      "command": "aiperture",
       "args": ["mcp-serve"],
       "env": {
-        "APERTURE_PERMISSION_LEARNING_MIN_DECISIONS": "5",
-        "APERTURE_AUTO_APPROVE_THRESHOLD": "0.90"
+        "AIPERTURE_PERMISSION_LEARNING_MIN_DECISIONS": "5",
+        "AIPERTURE_AUTO_APPROVE_THRESHOLD": "0.90"
       }
     }
   }
@@ -187,7 +187,7 @@ APERTURE_AUTO_APPROVE_THRESHOLD=0.90           # Lower approval rate required
 **Via the interactive wizard:**
 
 ```bash
-aperture configure
+aiperture configure
 ```
 
 ## Running the API server alongside MCP
@@ -196,7 +196,7 @@ The MCP server (stdio) and REST API server can run at the same time. This is use
 
 ```bash
 # In one terminal — API server for querying
-aperture serve
+aiperture serve
 
 # Claude Code uses MCP (stdio) — no extra terminal needed
 ```
@@ -204,7 +204,10 @@ aperture serve
 Query examples:
 
 ```bash
-# What has Aperture learned?
+# Check database health
+curl localhost:8100/health
+
+# What has AIperture learned?
 curl localhost:8100/permissions/patterns?min_decisions=5
 
 # Full audit trail
@@ -214,20 +217,31 @@ curl localhost:8100/audit/events?limit=50
 curl localhost:8100/config
 ```
 
-## Troubleshooting
+### Securing the API server
 
-**"aperture: command not found"**
+If the API server is accessible on a network (not just localhost), set a bearer token:
 
 ```bash
-pip install aperture-ai
-which aperture   # Should print a path
+export AIPERTURE_API_KEY="your-secret-key"
+aiperture serve
+```
+
+All requests must then include `Authorization: Bearer your-secret-key`. The MCP server is unaffected — it uses stdio transport and doesn't go through the HTTP API.
+
+## Troubleshooting
+
+**"aiperture: command not found"**
+
+```bash
+pip install aiperture
+which aiperture   # Should print a path
 ```
 
 If you're using a virtual environment, make sure it's activated. If you installed globally, make sure your Python scripts directory is on your PATH.
 
 **Permissions aren't being learned**
 
-Check that `APERTURE_PERMISSION_LEARNING_ENABLED` is `true` (the default). Also verify decisions are being recorded:
+Check that `AIPERTURE_PERMISSION_LEARNING_ENABLED` is `true` (the default). Also verify decisions are being recorded:
 
 ```bash
 curl localhost:8100/audit/events?limit=5
@@ -240,8 +254,8 @@ If the audit trail is empty, the MCP connection may not be working. Check Claude
 Delete the database and re-initialize:
 
 ```bash
-rm aperture.db
-aperture init-db
+rm aiperture.db
+aiperture init-db
 ```
 
 ## Next steps

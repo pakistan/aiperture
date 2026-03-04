@@ -3,15 +3,24 @@
 
 import pytest
 
-import aperture.config
-from aperture.db.engine import init_db, reset_engine
+import aiperture.config
+from aiperture import plugins
+from aiperture.db.engine import init_db, reset_engine
+
+
+@pytest.fixture(autouse=True)
+def _reset_plugins():
+    """Reset plugin registry before each test."""
+    plugins.reset()
+    yield
+    plugins.reset()
 
 
 @pytest.fixture(autouse=True)
 def fresh_db(tmp_path):
     """Create a fresh SQLite database for each test."""
     db_path = tmp_path / "test.db"
-    aperture.config.settings = aperture.config.Settings(
+    aiperture.config.settings = aiperture.config.Settings(
         db_path=str(db_path),
         artifact_storage_dir=str(tmp_path / "artifacts"),
     )

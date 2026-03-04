@@ -1,14 +1,14 @@
 """Tests for the revocation/unlearning mechanism (Fix 8)."""
 
-import aperture.config
-from aperture.models.permission import PermissionDecision, PermissionLog
-from aperture.permissions.challenge import create_challenge
-from aperture.permissions.crowd import get_org_signal
-from aperture.permissions.engine import PermissionEngine
-from aperture.permissions.learning import PermissionLearner
+import aiperture.config
+from aiperture.models.permission import PermissionDecision, PermissionLog
+from aiperture.permissions.challenge import create_challenge
+from aiperture.permissions.crowd import get_org_signal
+from aiperture.permissions.engine import PermissionEngine
+from aiperture.permissions.learning import PermissionLearner
 from sqlmodel import Session, select
 
-from aperture.db import get_engine
+from aiperture.db import get_engine
 
 
 def _make_challenge(tool: str, action: str, scope: str, organization_id: str = "default", session_id: str = "") -> dict:
@@ -43,8 +43,8 @@ class TestRevokePattern:
         engine = PermissionEngine()
         org = "revoke-auto-org"
         # Set low thresholds for this test
-        aperture.config.settings.permission_learning_min_decisions = 3
-        aperture.config.settings.auto_approve_threshold = 0.8
+        aiperture.config.settings.permission_learning_min_decisions = 3
+        aiperture.config.settings.auto_approve_threshold = 0.8
 
         _seed_decisions(engine, "filesystem", "read", "docs/*", 5, org)
 
@@ -93,15 +93,15 @@ class TestRevokePattern:
     def test_revoke_clears_session_cache(self):
         """Session cache entries for revoked pattern are removed."""
         engine = PermissionEngine()
-        # Add to session cache
-        engine._session_cache[("default", "shell", "execute", "ls*", "sess1", "")] = PermissionDecision.ALLOW
-        engine._session_cache[("default", "shell", "execute", "cat*", "sess1", "")] = PermissionDecision.ALLOW
+        # Add to session cache using .set() API
+        engine._session_cache.set(("default", "shell", "execute", "ls*", "sess1", ""), PermissionDecision.ALLOW)
+        engine._session_cache.set(("default", "shell", "execute", "cat*", "sess1", ""), PermissionDecision.ALLOW)
 
         engine.revoke_pattern("shell", "execute", "ls*", "admin")
 
         # ls* should be removed, cat* should remain
-        assert ("default", "shell", "execute", "ls*", "sess1", "") not in engine._session_cache
-        assert ("default", "shell", "execute", "cat*", "sess1", "") in engine._session_cache
+        assert engine._session_cache.get(("default", "shell", "execute", "ls*", "sess1", "")) is None
+        assert engine._session_cache.get(("default", "shell", "execute", "cat*", "sess1", "")) == PermissionDecision.ALLOW
 
     def test_revoke_idempotent(self):
         """Revoking same pattern twice does not error."""

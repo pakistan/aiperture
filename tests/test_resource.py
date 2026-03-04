@@ -1,6 +1,6 @@
 """Tests for the resource extractor."""
 
-from aperture.permissions import extract_resource
+from aiperture.permissions import extract_resource
 
 
 class TestShellResourceExtraction:
