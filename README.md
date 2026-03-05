@@ -120,14 +120,6 @@ curl -X POST localhost:8100/permissions/check \
   -d '{"tool": "shell", "action": "execute", "scope": "npm test"}'
 ```
 
-## What you experience
-
-**Day 1** — Run `aiperture bootstrap developer` and 75 common safe patterns are auto-approved from the start. You only get asked about things not in the preset. Every decision you make is recorded.
-
-**Day 3** — AIperture has learned your project-specific patterns. Custom build scripts, your test commands, project-specific file paths — all auto-approved.
-
-**Day 7** — The only popups you see are for genuinely new or risky actions. Everything routine is handled. Everything dangerous is flagged. You have a full audit trail.
-
 ## Security
 
 AIperture includes multiple layers of protection:
