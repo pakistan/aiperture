@@ -108,6 +108,7 @@ curl -X POST localhost:8100/permissions/check \
 | **OpenAI Agents SDK** | Python middleware | Preview |
 | **Google ADK** | Python middleware | Preview |
 | **OpenClaw** | MCP server | Preview |
+| **NanoClaw** | MCP server | Preview |
 | **Cursor / Windsurf** | MCP server | Planned |
 | **Any MCP runtime** | `aiperture mcp-serve` | Stable |
 | **Any HTTP client** | REST API | Stable |
