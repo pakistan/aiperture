@@ -33,7 +33,8 @@ python examples/openclaw_demo.py  # run learning loop demo
 ## Tech Stack
 
 - **Python 3.12** + **FastAPI** + **SQLModel** + **SQLite** (default)
-- **MCP** (Model Context Protocol) for Claude Code integration
+- **MCP** (Model Context Protocol) for MCP-native runtimes (OpenClaw, Cursor, etc.)
+- **Runtime integrations** for OpenAI Agents SDK, Google ADK, Claude Code
 - Zero LLM calls anywhere in the codebase
 
 ## Project Structure
@@ -63,6 +64,12 @@ aiperture/
 │   ├── hooks/               # Claude Code hook integration
 │   │   ├── tool_mapping.py  # Map Claude Code tools to (tool, action, scope) triples
 │   │   └── pending_tracker.py # Track pending requests for denial inference
+│   ├── integrations/        # Runtime integration layer
+│   │   ├── base.py          # ToolMapper protocol + PermissionGuard base class
+│   │   ├── anthropic/       # Claude Code (wraps hooks/, ClaudeCodePermissionGuard)
+│   │   ├── openai/          # OpenAI Agents SDK (AipertureGuardrail, @aiperture_guard, OpenAIPermissionGuard)
+│   │   ├── google_adk/      # Google ADK (ADKPermissionGuard)
+│   │   └── mcp/             # MCP-native runtimes (OpenClaw, Cursor, Windsurf — re-exports mcp_server)
 │   ├── permissions/         # Permission engine + learning + intelligence
 │   │   ├── engine.py        # RBAC + ReBAC + auto-learning + rate limiting + risk budget + rubber-stamping + temporal decay + hooks + metrics
 │   │   ├── learning.py      # Pattern detection from decision history

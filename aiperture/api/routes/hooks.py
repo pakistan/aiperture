@@ -11,6 +11,9 @@ Two endpoints handle the Claude Code hooks lifecycle:
 2. POST /hooks/post-tool-use
    Called by Claude Code's PostToolUse hook after a tool executes successfully.
    Records an implicit approval (the user saw and approved the tool call).
+
+These endpoints use Claude Code's hook payload format. Other runtimes use the
+generic integration layer in aiperture.integrations.
 """
 
 from __future__ import annotations

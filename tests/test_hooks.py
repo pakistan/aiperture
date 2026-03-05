@@ -463,6 +463,7 @@ class TestRecordHookDecision:
             decision=PermissionDecision.ALLOW,
             session_id="test-session",
             organization_id="default",
+            runtime_id="claude-code",
         )
         assert log.decided_by == "human:claude-code-hook"
         assert log.decision == PermissionDecision.ALLOW

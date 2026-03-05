@@ -397,21 +397,22 @@ class PermissionEngine:
         organization_id: str = "default",
         runtime_id: str = "",
     ) -> PermissionLog:
-        """Record a permission decision from Claude Code's hook integration.
+        """Record a permission decision from a runtime's hook integration.
 
         Unlike record_human_decision, this does NOT require an HMAC challenge
-        token. Claude Code's own permission dialog is the human verification
-        gate — if PostToolUse fires, the user approved.
+        token. The runtime's own permission dialog is the human verification
+        gate — if the post-tool hook fires, the user approved.
 
-        Records with decided_by="human:claude-code-hook" so the learning
+        Records with decided_by="human:<runtime_id>-hook" so the learning
         engine picks up the "human:" prefix and includes it in pattern
         detection.
         """
+        hook_label = f"{runtime_id}-hook" if runtime_id else "runtime-hook"
         # Rubber-stamping detection
-        effective_decided_by = "human:claude-code-hook"
+        effective_decided_by = f"human:{hook_label}"
         if decision == PermissionDecision.ALLOW and session_id:
             effective_decided_by = self._check_rapid_approval(
-                session_id, tool, action, "claude-code-hook",
+                session_id, tool, action, hook_label,
             )
 
         # Cache in session memory
