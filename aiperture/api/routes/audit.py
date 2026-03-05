@@ -1,6 +1,6 @@
 """Audit API — immutable event trail.
 
-Everything that happens in Aperture is logged here.
+Everything that happens in AIperture is logged here.
 This is the compliance backbone.
 """
 

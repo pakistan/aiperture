@@ -174,7 +174,7 @@ def get_permission_patterns(
     organization_id: str = "default",
     min_decisions: int = 5,
 ) -> str:
-    """View what Aperture has learned from human permission decisions.
+    """View what AIperture has learned from human permission decisions.
 
     Shows which tool/action/scope combinations are being auto-approved,
     auto-denied, or still need human review.
@@ -189,7 +189,7 @@ def get_permission_patterns(
     )
 
     if not patterns:
-        return "No permission patterns learned yet. Aperture needs more human decisions to detect patterns."
+        return "No permission patterns learned yet. AIperture needs more human decisions to detect patterns."
 
     lines = ["Learned permission patterns:\n"]
     for p in patterns:
@@ -233,7 +233,7 @@ def store_artifact(
     """Store an AI agent output as a verified artifact.
 
     Every tool call result, LLM response, or generated file should be
-    stored here. Aperture SHA-256 hashes the content for integrity
+    stored here. AIperture SHA-256 hashes the content for integrity
     verification and creates an immutable audit trail.
 
     Args:
@@ -338,7 +338,7 @@ def get_audit_trail(
     entity_id: str = "",
     limit: int = 20,
 ) -> str:
-    """Get the audit trail — everything that happened in Aperture.
+    """Get the audit trail — everything that happened in AIperture.
 
     Every permission check, every artifact stored, every human decision
     is logged here. Use this for compliance review or debugging.
@@ -376,7 +376,7 @@ def get_audit_trail(
 
 @mcp.tool()
 def get_config() -> str:
-    """Get current Aperture configuration (tunable settings only).
+    """Get current AIperture configuration (tunable settings only).
 
     Returns the 14 tunable settings with their current values and descriptions.
     Infrastructure settings (db_path, api_host, etc.) are not exposed.

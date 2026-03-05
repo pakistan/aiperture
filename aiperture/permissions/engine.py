@@ -883,7 +883,7 @@ class PermissionEngine:
 
         HIGH and CRITICAL risk actions are never auto-approved — they always
         require explicit human approval regardless of history. This prevents
-        a user approving `rm -rf ./build/` a few times from causing Aperture
+        a user approving `rm -rf ./build/` a few times from causing AIperture
         to auto-approve destructive commands.
 
         On database failure, returns None (fail closed — falls through to

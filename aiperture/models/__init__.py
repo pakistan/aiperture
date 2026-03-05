@@ -1,4 +1,4 @@
-"""Aperture data models — all stateful schema definitions."""
+"""AIperture data models — all stateful schema definitions."""
 
 from aiperture.models.artifact import (
     Artifact,

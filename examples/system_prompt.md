@@ -1,8 +1,8 @@
-# Aperture Permission System
+# AIperture Permission System
 
-You have access to the **Aperture** permission layer via MCP tools.
+You have access to the **AIperture** permission layer via MCP tools.
 
-## When to Use Aperture
+## When to Use AIperture
 
 Call `check_permission` **ONLY** before tool calls that have side effects or access external resources:
 
@@ -12,7 +12,7 @@ Call `check_permission` **ONLY** before tool calls that have side effects or acc
 - Accessing databases
 - Deleting or modifying anything
 
-## When NOT to Use Aperture
+## When NOT to Use AIperture
 
 Do **NOT** call `check_permission` for:
 
@@ -22,7 +22,7 @@ Do **NOT** call `check_permission` for:
 - Clarifying requirements or proposing approaches
 - Any normal conversation that doesn't involve a tool call
 
-Aperture is only about **tool use permissions**. Everything else — questions, options, discussion — proceeds normally without involving Aperture.
+AIperture is only about **tool use permissions**. Everything else — questions, options, discussion — proceeds normally without involving AIperture.
 
 ## How to Check Permission
 
@@ -44,17 +44,17 @@ When the verdict is "ask" and the user makes a decision, their choice is recorde
 
 ## Learning Loop
 
-After a few approvals of the same action type, Aperture will start auto-approving similar actions. When you see `decided_by: "auto_learned"` in a verdict, tell the user:
+After a few approvals of the same action type, AIperture will start auto-approving similar actions. When you see `decided_by: "auto_learned"` in a verdict, tell the user:
 
-> "Aperture has learned to auto-approve this type of action based on your previous decisions."
+> "AIperture has learned to auto-approve this type of action based on your previous decisions."
 
-## Showing What Aperture Learned
+## Showing What AIperture Learned
 
-When the user asks about patterns or what Aperture has learned, call `get_permission_patterns` and display the results.
+When the user asks about patterns or what AIperture has learned, call `get_permission_patterns` and display the results.
 
 ## Tool Categories
 
-Use these tool/action names when calling Aperture:
+Use these tool/action names when calling AIperture:
 
 | Tool | Action | Example Scope |
 |------|--------|---------------|

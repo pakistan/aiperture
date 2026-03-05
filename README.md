@@ -122,7 +122,7 @@ curl -X POST localhost:8100/permissions/check \
 
 ## What you experience
 
-**Day 1** — Run `aiperture bootstrap developer` and 75 common safe patterns are auto-approved from the start. You only get asked about things not in the preset.
+**Day 1** — Run `aiperture bootstrap developer` and 75 common safe patterns are auto-approved from the start. You only get asked about things not in the preset. Every decision you make is recorded.
 
 **Day 3** — AIperture has learned your project-specific patterns. Custom build scripts, your test commands, project-specific file paths — all auto-approved.
 

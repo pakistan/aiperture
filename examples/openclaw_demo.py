@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""OpenClaw + Aperture Demo — Permission learning loop in action.
+"""OpenClaw + AIperture Demo — Permission learning loop in action.
 
 Two modes:
   1. **Real mode** — If OpenClaw (ClawDBot) is installed, creates an isolated
-     workspace, spawns OpenClaw with Aperture as its MCP server, and walks
+     workspace, spawns OpenClaw with AIperture as its MCP server, and walks
      through a scripted conversation showing deny -> approve -> auto-approve.
   2. **Simulated mode** — Falls back to FastAPI TestClient if OpenClaw isn't
      available. Shows the exact same learning loop without a real agent runtime.
@@ -36,10 +36,10 @@ def _header(text: str) -> None:
 
 
 def run_real_openclaw_demo() -> None:
-    """Set up an isolated workspace and launch OpenClaw with Aperture MCP."""
+    """Set up an isolated workspace and launch OpenClaw with AIperture MCP."""
 
-    _header("Aperture + OpenClaw (Real Agent) Demo")
-    print("  This demo creates a temporary workspace, wires Aperture as")
+    _header("AIperture + OpenClaw (Real Agent) Demo")
+    print("  This demo creates a temporary workspace, wires AIperture as")
     print("  OpenClaw's MCP permission server, and runs a scripted session.\n")
 
     examples_dir = Path(__file__).resolve().parent
@@ -55,7 +55,7 @@ def run_real_openclaw_demo() -> None:
         # Create a dummy file for the agent to read
         (workspace / "README.md").write_text(
             "# Demo Project\n\n"
-            "This is a sample project for the Aperture permission learning demo.\n"
+            "This is a sample project for the AIperture permission learning demo.\n"
         )
 
         # 2. Patch the config to use the workspace DB path
@@ -66,8 +66,8 @@ def run_real_openclaw_demo() -> None:
         )
         config_path.write_text(json.dumps(config, indent=2))
 
-        # 3. Initialize Aperture DB
-        print("[2/6] Initializing Aperture database ...")
+        # 3. Initialize AIperture DB
+        print("[2/6] Initializing AIperture database ...")
         env = {**os.environ, "AIPERTURE_DB_PATH": str(workspace / "aiperture.db")}
         subprocess.run(
             ["aiperture", "init-db"],
@@ -85,7 +85,7 @@ def run_real_openclaw_demo() -> None:
 
         # 5. Attempt scripted conversation via openclaw CLI
         print("[4/6] Attempting scripted OpenClaw conversation ...")
-        print("  (Sending test messages to verify Aperture MCP wiring)\n")
+        print("  (Sending test messages to verify AIperture MCP wiring)\n")
 
         # Use `openclaw run` for non-interactive scripted execution
         # If `openclaw run` isn't available, show the user how to do it manually
@@ -121,8 +121,8 @@ def run_real_openclaw_demo() -> None:
             print("  Timed out waiting for OpenClaw. Use interactive mode:")
             print(f"    cd {workspace} && openclaw chat")
 
-        # 6. Show the Aperture audit trail (if anything was recorded)
-        print("\n[5/6] Checking Aperture audit trail ...")
+        # 6. Show the AIperture audit trail (if anything was recorded)
+        print("\n[5/6] Checking AIperture audit trail ...")
         try:
             import aiperture.config
             from aiperture.config import Settings
@@ -155,7 +155,7 @@ def run_real_openclaw_demo() -> None:
 def run_simulated_demo() -> None:
     """Run the learning loop demo using FastAPI TestClient — no external deps."""
 
-    _header("Aperture Demo: Permission Learning Loop (Simulated)")
+    _header("AIperture Demo: Permission Learning Loop (Simulated)")
     print("  OpenClaw not installed — using in-process simulation.")
     print("  Install OpenClaw for the real agent demo: npm install -g openclaw@latest\n")
 
@@ -235,7 +235,7 @@ def run_simulated_demo() -> None:
         print(f"  Decided by: {decided_by}")
 
         if verdict["decision"] == "allow" and decided_by == "auto_learned":
-            print("  AUTO-APPROVED! Aperture learned from human decisions.")
+            print("  AUTO-APPROVED! AIperture learned from human decisions.")
         else:
             print("  (Pattern detected but may need more decisions or different thresholds)")
 
@@ -255,7 +255,7 @@ def run_simulated_demo() -> None:
             print(f"  {key} = {value}  ({desc})")
 
         _header("Demo complete!")
-        print("  Aperture learned to auto-approve `git status`")
+        print("  AIperture learned to auto-approve `git status`")
         print("  after 5 human approvals with a 90% threshold.\n")
 
 
