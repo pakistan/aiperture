@@ -112,6 +112,7 @@ class PermissionEngine:
         task_id: str = "",
         session_id: str = "",
         organization_id: str = "default",
+        project_id: str = "global",
         runtime_id: str = "",
         enrich: bool = False,
         content_hash: str = "",
@@ -126,6 +127,7 @@ class PermissionEngine:
             task_id: If set, check task-scoped ReBAC grants first
             session_id: Session identifier for grouping and memory
             organization_id: Tenant ID
+            project_id: Project scope ("global" for cross-project patterns)
             runtime_id: Which external runtime is asking
             enrich: If True, compute risk, explanation, crowd signal, etc.
             content_hash: Optional content hash — different hashes = different checks
@@ -143,7 +145,8 @@ class PermissionEngine:
             return self._check_inner(
                 tool, action, scope, permissions,
                 task_id=task_id, session_id=session_id,
-                organization_id=organization_id, runtime_id=runtime_id,
+                organization_id=organization_id, project_id=project_id,
+                runtime_id=runtime_id,
                 enrich=enrich, content_hash=content_hash,
             )
 
@@ -157,6 +160,7 @@ class PermissionEngine:
         task_id: str = "",
         session_id: str = "",
         organization_id: str = "default",
+        project_id: str = "global",
         runtime_id: str = "",
         enrich: bool = False,
         content_hash: str = "",
@@ -176,26 +180,29 @@ class PermissionEngine:
                 self._log(
                     tool, action, scope, PermissionDecision.DENY, "rate_limit",
                     task_id=task_id, session_id=session_id,
-                    organization_id=organization_id, runtime_id=runtime_id,
+                    organization_id=organization_id, project_id=project_id,
+                    runtime_id=runtime_id,
                 )
                 logger.warning("DENY %s/%s %s (rate_limit)", tool, action, scope)
                 return rate_verdict
 
-        # 0. Session memory (organization_id + content_hash are part of the cache key)
-        cache_key = (organization_id, tool, action, scope, session_id, content_hash)
+        # 0. Session memory (organization_id + project_id + content_hash are part of the cache key)
+        cache_key = (organization_id, project_id, tool, action, scope, session_id, content_hash)
         if session_id:
             cached = self._session_cache.get(cache_key)
             if cached is not None:
                 SESSION_CACHE_HITS.inc()
                 verdict = self._build_verdict(
                     cached, "session_memory", tool, action, scope,
-                    organization_id=organization_id, enrich=enrich,
+                    organization_id=organization_id, project_id=project_id,
+                    enrich=enrich,
                     content_hash=content_hash, session_id=session_id,
                 )
                 self._log(
                     tool, action, scope, cached, "session_memory",
                     task_id=task_id, session_id=session_id,
-                    organization_id=organization_id, runtime_id=runtime_id,
+                    organization_id=organization_id, project_id=project_id,
+                    runtime_id=runtime_id,
                 )
                 logger.debug("%s %s/%s %s (session_memory)", cached.value.upper(), tool, action, scope)
                 return verdict
@@ -206,23 +213,25 @@ class PermissionEngine:
         # 1. Check task-scoped grants (ReBAC)
         if task_id:
             task_decision = self._check_task_permissions(
-                tool, action, scope, task_id, organization_id
+                tool, action, scope, task_id, organization_id, project_id,
             )
             if task_decision is not None:
                 self._log(
                     tool, action, scope, task_decision, "rebac",
                     task_id=task_id, session_id=session_id,
-                    organization_id=organization_id, runtime_id=runtime_id,
+                    organization_id=organization_id, project_id=project_id,
+                    runtime_id=runtime_id,
                 )
                 self._log_decision(task_decision, tool, action, scope, "rebac")
                 return self._build_verdict(
                     task_decision, "rebac", tool, action, scope,
-                    organization_id=organization_id, enrich=enrich,
+                    organization_id=organization_id, project_id=project_id,
+                    enrich=enrich,
                     session_id=session_id,
                 )
 
-        # 2. Check learned auto-decisions
-        learned = self._check_learned(tool, action, scope, organization_id)
+        # 2. Check learned auto-decisions (project-scoped first, then global fallback)
+        learned = self._check_learned(tool, action, scope, organization_id, project_id)
         if learned is not None:
             # Session risk budget: escalate ALLOW to ASK if budget exhausted
             if learned == PermissionDecision.ALLOW and session_id:
@@ -238,12 +247,14 @@ class PermissionEngine:
             self._log(
                 tool, action, scope, learned, "auto_learned",
                 task_id=task_id, session_id=session_id,
-                organization_id=organization_id, runtime_id=runtime_id,
+                organization_id=organization_id, project_id=project_id,
+                runtime_id=runtime_id,
             )
             self._log_decision(learned, tool, action, scope, "auto_learned")
             return self._build_verdict(
                 learned, "auto_learned", tool, action, scope,
-                organization_id=organization_id, enrich=enrich,
+                organization_id=organization_id, project_id=project_id,
+                enrich=enrich,
                 session_id=session_id,
             )
 
@@ -262,12 +273,14 @@ class PermissionEngine:
             self._log(
                 tool, action, scope, static_decision, "static_rule",
                 task_id=task_id, session_id=session_id,
-                organization_id=organization_id, runtime_id=runtime_id,
+                organization_id=organization_id, project_id=project_id,
+                runtime_id=runtime_id,
             )
             self._log_decision(static_decision, tool, action, scope, "static_rule")
             return self._build_verdict(
                 static_decision, "static_rule", tool, action, scope,
-                organization_id=organization_id, enrich=enrich,
+                organization_id=organization_id, project_id=project_id,
+                enrich=enrich,
                 session_id=session_id,
             )
 
@@ -278,12 +291,14 @@ class PermissionEngine:
         self._log(
             tool, action, scope, decision, "default",
             task_id=task_id, session_id=session_id,
-            organization_id=organization_id, runtime_id=runtime_id,
+            organization_id=organization_id, project_id=project_id,
+            runtime_id=runtime_id,
         )
         self._log_decision(decision, tool, action, scope, "default")
         return self._build_verdict(
             decision, "default", tool, action, scope,
-            organization_id=organization_id, enrich=enrich,
+            organization_id=organization_id, project_id=project_id,
+            enrich=enrich,
             session_id=session_id,
         )
 
@@ -296,6 +311,7 @@ class PermissionEngine:
         decision: PermissionDecision,
         granted_by: str,
         organization_id: str = "default",
+        project_id: str = "global",
         ttl_seconds: int | None = None,
     ) -> TaskPermission:
         """Grant a task-scoped permission (ReBAC)."""
@@ -307,6 +323,7 @@ class PermissionEngine:
             permission_id=uuid.uuid4().hex[:16],
             task_id=task_id,
             organization_id=organization_id,
+            project_id=project_id,
             tool=tool,
             action=action,
             scope=scope,
@@ -336,6 +353,7 @@ class PermissionEngine:
         task_id: str = "",
         session_id: str = "",
         organization_id: str = "default",
+        project_id: str = "global",
         runtime_id: str = "",
         reasoning: str = "",
     ) -> PermissionLog:
@@ -377,13 +395,14 @@ class PermissionEngine:
 
         # Cache in session memory
         if session_id:
-            cache_key = (organization_id, tool, action, scope, session_id, "")
+            cache_key = (organization_id, project_id, tool, action, scope, session_id, "")
             self._session_cache.set(cache_key, decision)
 
         return self._log(
             tool, action, scope, decision, effective_decided_by,
             task_id=task_id, session_id=session_id,
-            organization_id=organization_id, runtime_id=runtime_id,
+            organization_id=organization_id, project_id=project_id,
+            runtime_id=runtime_id,
         )
 
     def record_hook_decision(
@@ -395,6 +414,7 @@ class PermissionEngine:
         *,
         session_id: str = "",
         organization_id: str = "default",
+        project_id: str = "global",
         runtime_id: str = "",
     ) -> PermissionLog:
         """Record a permission decision from a runtime's hook integration.
@@ -417,7 +437,7 @@ class PermissionEngine:
 
         # Cache in session memory
         if session_id:
-            cache_key = (organization_id, tool, action, scope, session_id, "")
+            cache_key = (organization_id, project_id, tool, action, scope, session_id, "")
             self._session_cache.set(cache_key, decision)
 
         # Also record with normalized scope to accelerate learning
@@ -425,18 +445,20 @@ class PermissionEngine:
 
         normalized = normalize_scope(tool, action, scope)
         if normalized and normalized != scope:
-            norm_cache_key = (organization_id, tool, action, normalized, session_id, "")
+            norm_cache_key = (organization_id, project_id, tool, action, normalized, session_id, "")
             self._session_cache.set(norm_cache_key, decision)
             self._log(
                 tool, action, normalized, decision, effective_decided_by,
                 session_id=session_id,
-                organization_id=organization_id, runtime_id=runtime_id,
+                organization_id=organization_id, project_id=project_id,
+                runtime_id=runtime_id,
             )
 
         return self._log(
             tool, action, scope, decision, effective_decided_by,
             session_id=session_id,
-            organization_id=organization_id, runtime_id=runtime_id,
+            organization_id=organization_id, project_id=project_id,
+            runtime_id=runtime_id,
         )
 
     def revoke_pattern(
@@ -446,6 +468,7 @@ class PermissionEngine:
         scope: str,
         revoked_by: str,
         organization_id: str = "default",
+        project_id: str = "global",
     ) -> int:
         """Revoke all learned decisions matching (tool, action, scope).
 
@@ -640,6 +663,7 @@ class PermissionEngine:
         scope: str,
         *,
         organization_id: str = "default",
+        project_id: str = "global",
         enrich: bool = False,
         content_hash: str = "",
         session_id: str = "",
@@ -657,7 +681,7 @@ class PermissionEngine:
         # — if a decision exists with no content_hash, the content has changed.
         content_changed = False
         if content_hash and session_id:
-            empty_hash_key = (organization_id, tool, action, scope, session_id, "")
+            empty_hash_key = (organization_id, project_id, tool, action, scope, session_id, "")
             prev = self._session_cache.get(empty_hash_key)
             if prev is not None:
                 content_changed = True
@@ -836,6 +860,7 @@ class PermissionEngine:
         scope: str,
         task_id: str,
         organization_id: str,
+        project_id: str = "global",
     ) -> PermissionDecision | None:
         """Check task-scoped ReBAC grants.
 
@@ -849,6 +874,7 @@ class PermissionEngine:
                     select(TaskPermission).where(
                         TaskPermission.task_id == task_id,
                         TaskPermission.organization_id == organization_id,
+                        TaskPermission.project_id == project_id,
                         TaskPermission.status == TaskPermissionStatus.ACTIVE,
                     )
                 ).all()
@@ -878,17 +904,42 @@ class PermissionEngine:
         action: str,
         scope: str,
         organization_id: str,
+        project_id: str = "global",
     ) -> PermissionDecision | None:
         """Check if we've learned enough to auto-decide.
 
-        HIGH and CRITICAL risk actions are never auto-approved — they always
-        require explicit human approval regardless of history. This prevents
-        a user approving `rm -rf ./build/` a few times from causing AIperture
-        to auto-approve destructive commands.
+        Two-pass lookup: project-scoped patterns first, then global fallback.
+        This mirrors git config precedence (local > global).
 
-        On database failure, returns None (fail closed — falls through to
-        static rules then default decision).
+        HIGH and CRITICAL risk actions are never auto-approved — they always
+        require explicit human approval regardless of history.
+
+        On database failure, returns None (fail closed).
         """
+        from aiperture.project import GLOBAL_PROJECT_ID
+
+        # Try project-specific patterns first
+        if project_id != GLOBAL_PROJECT_ID:
+            result = self._check_learned_for_project(
+                tool, action, scope, organization_id, project_id,
+            )
+            if result is not None:
+                return result
+
+        # Fall back to global patterns
+        return self._check_learned_for_project(
+            tool, action, scope, organization_id, GLOBAL_PROJECT_ID,
+        )
+
+    def _check_learned_for_project(
+        self,
+        tool: str,
+        action: str,
+        scope: str,
+        organization_id: str,
+        project_id: str,
+    ) -> PermissionDecision | None:
+        """Check learned patterns for a specific project_id."""
         import aiperture.config
 
         settings = aiperture.config.settings
@@ -911,10 +962,11 @@ class PermissionEngine:
                 logs = session.exec(
                     select(PermissionLog).where(
                         PermissionLog.organization_id == organization_id,
+                        PermissionLog.project_id == project_id,
                         PermissionLog.tool == tool,
                         PermissionLog.action == action,
                         PermissionLog.decided_by.startswith("human:"),  # type: ignore[union-attr]
-                        PermissionLog.revoked_at.is_(None),  # type: ignore[union-attr]  # exclude revoked
+                        PermissionLog.revoked_at.is_(None),  # type: ignore[union-attr]
                     ).order_by(PermissionLog.created_at.desc())  # type: ignore[union-attr]
                 ).all()
         except Exception:
@@ -956,15 +1008,15 @@ class PermissionEngine:
 
         if rate >= settings.auto_approve_threshold:
             logger.info(
-                "Auto-approving %s.%s on %s (%.0f%% approval rate, %d decisions)",
-                tool, action, scope, rate * 100, len(matching),
+                "Auto-approving %s.%s on %s [project=%s] (%.0f%% approval rate, %d decisions)",
+                tool, action, scope, project_id, rate * 100, len(matching),
             )
             return PermissionDecision.ALLOW
 
         if rate <= settings.auto_deny_threshold:
             logger.info(
-                "Auto-denying %s.%s on %s (%.0f%% approval rate, %d decisions)",
-                tool, action, scope, rate * 100, len(matching),
+                "Auto-denying %s.%s on %s [project=%s] (%.0f%% approval rate, %d decisions)",
+                tool, action, scope, project_id, rate * 100, len(matching),
             )
             return PermissionDecision.DENY
 
@@ -981,6 +1033,7 @@ class PermissionEngine:
         task_id: str = "",
         session_id: str = "",
         organization_id: str = "default",
+        project_id: str = "global",
         runtime_id: str = "",
     ) -> PermissionLog:
         """Persist every permission decision. Fire-and-forget."""
@@ -990,6 +1043,7 @@ class PermissionEngine:
 
         log_entry = PermissionLog(
             organization_id=organization_id,
+            project_id=project_id,
             task_id=task_id,
             session_id=session_id,
             tool=tool,

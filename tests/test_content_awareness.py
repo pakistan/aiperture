@@ -44,14 +44,14 @@ class TestContentHashCacheKey:
 
         # Static rules don't populate the session cache — only session_memory lookups do
         # But the cache_key includes content_hash, so they won't collide
-        assert engine._session_cache.get(("default", "filesystem", "write", "main.py", "s1", "abc123")) is None
+        assert engine._session_cache.get(("default", "global", "filesystem", "write", "main.py", "s1", "abc123")) is None
 
     def test_same_hash_uses_session_cache(self):
         """Same content_hash reuses the session cache entry."""
         engine = PermissionEngine()
 
         # Seed a cache entry directly
-        engine._session_cache.set(("default", "filesystem", "read", "f.py", "s1", "hash1"), PermissionDecision.ALLOW)
+        engine._session_cache.set(("default", "global", "filesystem", "read", "f.py", "s1", "hash1"), PermissionDecision.ALLOW)
 
         verdict = engine.check(
             tool="filesystem", action="read", scope="f.py",
@@ -66,7 +66,7 @@ class TestContentHashCacheKey:
         engine = PermissionEngine()
 
         # Seed cache with hash1
-        engine._session_cache.set(("default", "filesystem", "read", "f.py", "s1", "hash1"), PermissionDecision.ALLOW)
+        engine._session_cache.set(("default", "global", "filesystem", "read", "f.py", "s1", "hash1"), PermissionDecision.ALLOW)
 
         # Check with hash2 — should NOT get session_memory hit
         verdict = engine.check(
@@ -81,7 +81,7 @@ class TestContentHashCacheKey:
         """Empty content_hash matches cache entry with empty hash."""
         engine = PermissionEngine()
 
-        engine._session_cache.set(("default", "filesystem", "read", "f.py", "s1", ""), PermissionDecision.ALLOW)
+        engine._session_cache.set(("default", "global", "filesystem", "read", "f.py", "s1", ""), PermissionDecision.ALLOW)
 
         verdict = engine.check(
             tool="filesystem", action="read", scope="f.py",
@@ -100,7 +100,7 @@ class TestContentChangedFlag:
         engine = PermissionEngine()
 
         # Seed cache with empty-hash key (as record_human_decision does)
-        engine._session_cache.set(("default", "filesystem", "write", "main.py", "s1", ""), PermissionDecision.ALLOW)
+        engine._session_cache.set(("default", "global", "filesystem", "write", "main.py", "s1", ""), PermissionDecision.ALLOW)
 
         # Build verdict with new hash
         verdict = engine._build_verdict(
@@ -125,7 +125,7 @@ class TestContentChangedFlag:
         """Empty content_hash never triggers content_changed."""
         engine = PermissionEngine()
 
-        engine._session_cache.set(("default", "filesystem", "write", "main.py", "s1", ""), PermissionDecision.ALLOW)
+        engine._session_cache.set(("default", "global", "filesystem", "write", "main.py", "s1", ""), PermissionDecision.ALLOW)
 
         verdict = engine._build_verdict(
             PermissionDecision.DENY, "static_rule",

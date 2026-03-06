@@ -58,6 +58,7 @@ class PermissionLearner:
     def detect_patterns(
         self,
         organization_id: str = "default",
+        project_id: str = "global",
         *,
         min_decisions: int = 5,
         lookback_days: int = 90,
@@ -76,6 +77,7 @@ class PermissionLearner:
             logs = session.exec(
                 select(PermissionLog).where(
                     PermissionLog.organization_id == organization_id,
+                    PermissionLog.project_id == project_id,
                     PermissionLog.decided_by.startswith("human:"),  # type: ignore[union-attr]
                     PermissionLog.created_at >= cutoff,  # type: ignore[operator]
                     PermissionLog.revoked_at.is_(None),  # type: ignore[union-attr]  # exclude revoked
@@ -142,6 +144,7 @@ class PermissionLearner:
     def get_stats(
         self,
         organization_id: str = "default",
+        project_id: str = "global",
         lookback_days: int = 30,
     ) -> dict:
         """Get summary statistics for permission decisions."""
@@ -151,6 +154,7 @@ class PermissionLearner:
             all_logs = session.exec(
                 select(PermissionLog).where(
                     PermissionLog.organization_id == organization_id,
+                    PermissionLog.project_id == project_id,
                     PermissionLog.created_at >= cutoff,  # type: ignore[operator]
                 )
             ).all()

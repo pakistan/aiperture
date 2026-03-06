@@ -115,6 +115,7 @@ def get_preset(name: str) -> list[PresetDecision]:
 def apply_preset(
     preset_name: str,
     organization_id: str = "default",
+    project_id: str = "global",
     num_synthetic_decisions: int | None = None,
 ) -> int:
     """Apply a bootstrap preset by inserting synthetic permission decisions.
@@ -152,6 +153,7 @@ def apply_preset(
             for _ in range(num_synthetic_decisions):
                 entry = PermissionLog(
                     organization_id=organization_id,
+                    project_id=project_id,
                     tool=pattern.tool,
                     action=pattern.action,
                     scope=pattern.scope,

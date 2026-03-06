@@ -30,6 +30,7 @@ class AuditStore:
         summary: str,
         *,
         organization_id: str = "default",
+        project_id: str = "global",
         entity_type: str = "",
         entity_id: str = "",
         actor_id: str = "",
@@ -44,6 +45,7 @@ class AuditStore:
         event = AuditEvent(
             event_id=uuid.uuid4().hex[:16],
             organization_id=organization_id,
+            project_id=project_id,
             batch_id=batch_id,
             event_type=event_type,
             entity_type=entity_type,

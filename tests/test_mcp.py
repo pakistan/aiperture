@@ -164,6 +164,7 @@ class TestCheckPermission:
             action="execute",
             scope="test.sh",
             session_id="session-xyz",
+            project_id="global",
         ))
         assert result["decision"] == "allow"
         assert result["decided_by"] == "session_memory"
@@ -598,6 +599,7 @@ class TestEndToEndWorkflow:
             action="execute",
             scope="deploy.sh",
             session_id="session-e2e",
+            project_id="global",
         ))
         assert r1["decision"] == "ask"
 
@@ -622,6 +624,7 @@ class TestEndToEndWorkflow:
             action="execute",
             scope="deploy.sh",
             session_id="session-e2e",
+            project_id="global",
         ))
         assert r2["decision"] == "allow"
         assert r2["decided_by"] == "session_memory"
@@ -680,6 +683,7 @@ class TestEndToEndWorkflow:
             action="drop",
             scope="production.users",
             session_id="session-safe",
+            project_id="global",
         ))
         assert result["decision"] == "deny"
         assert result["decided_by"] == "session_memory"

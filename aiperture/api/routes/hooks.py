@@ -39,6 +39,7 @@ from aiperture.models.verdict import RiskTier
 from aiperture.permissions.engine import get_shared_engine
 from aiperture.permissions.learning import PermissionLearner
 from aiperture.permissions.risk import classify_risk
+from aiperture.project import detect_project_id
 from aiperture.stores.audit_store import AuditStore
 
 logger = logging.getLogger(__name__)
@@ -80,13 +81,21 @@ def handle_session_start():
 
     settings = aiperture.config.settings
     learner = PermissionLearner()
+    project_id = detect_project_id()
 
-    # Count learned patterns
+    # Count learned patterns (project-scoped + global)
     try:
-        patterns = learner.detect_patterns(
+        project_patterns = learner.detect_patterns(
             organization_id="default",
+            project_id=project_id,
+            min_decisions=settings.permission_learning_min_decisions,
+        ) if project_id != "global" else []
+        global_patterns = learner.detect_patterns(
+            organization_id="default",
+            project_id="global",
             min_decisions=settings.permission_learning_min_decisions,
         )
+        patterns = project_patterns + global_patterns
         auto_approve = sum(
             1 for p in patterns
             if p.approval_rate >= settings.auto_approve_threshold
@@ -109,6 +118,7 @@ def handle_session_start():
         parts.append("learning enabled")
     else:
         parts.append("learning disabled")
+    parts.append(f"project={project_id}")
     status_line = f"AIperture active \u2014 {', '.join(parts)}"
 
     # Build context for Claude
@@ -182,6 +192,7 @@ def handle_permission_request(payload: PermissionRequestPayload):
         return {}
 
     tool, action, scope = mapping
+    project_id = detect_project_id()
     pkey = _pending_key(payload.session_id, payload.tool_name, payload.tool_input)
 
     # Collect expired pending requests (piggybacked cleanup)
@@ -195,6 +206,7 @@ def handle_permission_request(payload: PermissionRequestPayload):
         permissions=[],  # No static rules — hooks rely on learned patterns only
         session_id=payload.session_id,
         organization_id="default",
+        project_id=project_id,
         runtime_id="claude-code",
     )
 
@@ -209,6 +221,7 @@ def handle_permission_request(payload: PermissionRequestPayload):
         pending.add(pkey, PendingRequest(
             tool=tool, action=action, scope=scope,
             session_id=payload.session_id, organization_id="default",
+            project_id=project_id,
         ))
         return {}
 
@@ -278,6 +291,7 @@ def handle_permission_request(payload: PermissionRequestPayload):
     pending.add(pkey, PendingRequest(
         tool=tool, action=action, scope=scope,
         session_id=payload.session_id, organization_id="default",
+        project_id=project_id,
     ))
 
     return {}
@@ -329,12 +343,14 @@ def handle_post_tool_use(
         return {"recorded": False, "reason": "no_permission_prompt"}
 
     # Record implicit approval in background for speed
+    project_id = detect_project_id()
     background_tasks.add_task(
         _record_implicit_approval,
         tool=tool,
         action=action,
         scope=scope,
         session_id=payload.session_id,
+        project_id=project_id,
     )
 
     return {"recorded": True}
@@ -345,6 +361,7 @@ def _record_implicit_approval(
     action: str,
     scope: str,
     session_id: str,
+    project_id: str = "global",
 ) -> None:
     """Record an implicit approval from Claude Code's permission dialog."""
     try:
@@ -355,6 +372,7 @@ def _record_implicit_approval(
             decision=PermissionDecision.ALLOW,
             session_id=session_id,
             organization_id="default",
+            project_id=project_id,
             runtime_id="claude-code",
         )
     except Exception:
@@ -383,6 +401,7 @@ def _process_expired_denials() -> None:
                 decision=PermissionDecision.DENY,
                 session_id=req.session_id,
                 organization_id=req.organization_id,
+                project_id=req.project_id,
                 runtime_id="claude-code",
             )
         except Exception:

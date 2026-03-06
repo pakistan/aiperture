@@ -28,11 +28,12 @@ class PermissionLog(SQLModel, table=True):
 
     __tablename__ = "permission_logs"
     __table_args__ = (
-        Index("ix_permlog_org_tool_action", "organization_id", "tool", "action"),
+        Index("ix_permlog_org_project_tool_action", "organization_id", "project_id", "tool", "action"),
     )
 
     id: int | None = Field(default=None, primary_key=True)
     organization_id: str = Field(default="default", index=True)
+    project_id: str = Field(default="global", index=True)
     task_id: str = Field(default="", index=True)
     session_id: str = Field(default="", index=True)
     tool: str
@@ -73,6 +74,7 @@ class TaskPermission(SQLModel, table=True):
     permission_id: str = Field(index=True)  # unique ID for this grant
     task_id: str = Field(index=True)
     organization_id: str = Field(default="default", index=True)
+    project_id: str = Field(default="global", index=True)
     tool: str
     action: str
     scope: str

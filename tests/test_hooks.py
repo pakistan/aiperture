@@ -579,7 +579,7 @@ class TestRecordHookDecision:
             organization_id="default",
         )
         # Check session cache
-        cache_key = ("default", "filesystem", "read", "src/main.py", "cache-test", "")
+        cache_key = ("default", "global", "filesystem", "read", "src/main.py", "cache-test", "")
         cached = engine._session_cache.get(cache_key)
         assert cached == PermissionDecision.ALLOW
 
@@ -595,7 +595,7 @@ class TestRecordHookDecision:
             organization_id="default",
         )
         # Normalized scope should also be cached
-        norm_key = ("default", "filesystem", "read", "src/components/*.tsx", "norm-test", "")
+        norm_key = ("default", "global", "filesystem", "read", "src/components/*.tsx", "norm-test", "")
         cached = engine._session_cache.get(norm_key)
         assert cached == PermissionDecision.ALLOW
 

@@ -36,6 +36,7 @@ class Artifact(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     artifact_id: str = Field(index=True, unique=True)
     organization_id: str = Field(default="default", index=True)
+    project_id: str = Field(default="global", index=True)
     session_id: str = Field(default="", index=True)
     task_id: str = Field(default="", index=True)
     runtime_id: str = Field(default="", index=True)  # which external runtime produced this

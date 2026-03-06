@@ -24,6 +24,7 @@ class PendingRequest:
     scope: str
     session_id: str
     organization_id: str
+    project_id: str = "global"
     created_at: float = field(default_factory=time.time)
 
 

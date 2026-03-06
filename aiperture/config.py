@@ -52,6 +52,9 @@ class Settings(BaseSettings):
     # Artifacts
     artifact_storage_dir: str = ""
 
+    # Project scoping
+    project_id: str = ""  # explicit override; empty = auto-detect from git
+
     # Hooks
     hook_auto_allowed_tools: str = "Read,Grep,Glob,WebSearch,WebFetch"  # Claude Code tools to skip in PostToolUse
 

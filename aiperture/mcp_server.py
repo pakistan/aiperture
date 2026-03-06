@@ -128,6 +128,7 @@ def check_permission(
     task_id: str = "",
     session_id: str = "",
     organization_id: str = "default",
+    project_id: str = "",
     content_hash: str = "",
 ) -> str:
     """Check if an AI agent action is permitted.
@@ -147,9 +148,14 @@ def check_permission(
         task_id: Optional task ID for task-scoped permission grants
         session_id: Optional session ID for session memory (don't re-ask)
         organization_id: Tenant identifier
+        project_id: Project scope (auto-detected if empty)
         content_hash: Optional SHA-256 hash of content being written/modified.
             Different hashes are treated as separate checks even for the same scope.
     """
+    from aiperture.project import detect_project_id
+
+    resolved_project_id = project_id or detect_project_id()
+
     verdict = _engine.check(
         tool=tool,
         action=action,
@@ -158,6 +164,7 @@ def check_permission(
         task_id=task_id,
         session_id=session_id,
         organization_id=organization_id,
+        project_id=resolved_project_id,
         runtime_id="mcp",
         enrich=True,
         content_hash=content_hash,
@@ -295,10 +302,13 @@ def store_artifact(
         provider_used: Which provider (e.g. "anthropic", "openai")
         organization_id: Tenant identifier
     """
+    from aiperture.project import detect_project_id
+
     artifact = _artifacts.store(
         content=content,
         artifact_type=artifact_type,
         organization_id=organization_id,
+        project_id=detect_project_id(),
         task_id=task_id,
         runtime_id="mcp",
         tool_name=tool_name,

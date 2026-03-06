@@ -13,6 +13,7 @@ class AuditEvent(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     event_id: str = Field(index=True, unique=True)
     organization_id: str = Field(default="default", index=True)
+    project_id: str = Field(default="global", index=True)
     batch_id: str = Field(default="", index=True)
 
     # What happened

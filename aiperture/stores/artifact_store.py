@@ -32,6 +32,7 @@ class ArtifactStore:
         *,
         artifact_type: str = ArtifactType.CUSTOM,
         organization_id: str = "default",
+        project_id: str = "global",
         session_id: str = "",
         task_id: str = "",
         runtime_id: str = "",
@@ -72,6 +73,7 @@ class ArtifactStore:
         artifact = Artifact(
             artifact_id=uuid.uuid4().hex[:16],
             organization_id=organization_id,
+            project_id=project_id,
             session_id=session_id,
             task_id=task_id,
             runtime_id=runtime_id,
