@@ -236,6 +236,10 @@ def _write_hooks_config(settings: dict, settings_path) -> None:
     """
     import json
 
+    # SessionStart MUST use "type": "command" with curl retries, NOT "type": "http".
+    # The hooks server is embedded in the MCP process, which may not be ready when
+    # SessionStart fires. The curl --retry-connrefused handles this race condition.
+    # Using "type": "http" will silently fail because the server isn't up yet.
     aiperture_hooks = {
         "SessionStart": [{
             "matcher": "startup",
