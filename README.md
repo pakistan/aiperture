@@ -1,3 +1,5 @@
+-- No longer supporting cause i moved on to other projects. Please take it if you wna work on it. Add a shared intelligence model if you can. 
+
 # AIperture
 
 [![PyPI version](https://img.shields.io/pypi/v/aiperture)](https://pypi.org/project/aiperture/)
